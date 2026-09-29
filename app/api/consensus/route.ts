@@ -15,14 +15,21 @@ export async function POST(req: Request) {
 
     // Dinamik sağlayıcı tanımları
     const providers: Record<string, any> = {};
-    if (apiKeys.openai) providers.openai = createOpenAI({ apiKey: apiKeys.openai });
-    if (apiKeys.anthropic) providers.anthropic = createAnthropic({ apiKey: apiKeys.anthropic });
-    if (apiKeys.gemini) providers.google = createGoogleGenerativeAI({ apiKey: apiKeys.gemini });
+    if (apiKeys?.openai) providers.openai = createOpenAI({ apiKey: apiKeys.openai });
+    if (apiKeys?.anthropic) providers.anthropic = createAnthropic({ apiKey: apiKeys.anthropic });
+    if (apiKeys?.gemini) providers.google = createGoogleGenerativeAI({ apiKey: apiKeys.gemini });
+    if (apiKeys?.openrouter) {
+      providers.openrouter = createOpenAI({
+        baseURL: 'https://openrouter.ai/api/v1',
+        apiKey: apiKeys.openrouter,
+      });
+    }
 
     const getModelInstance = (providerName: string, modelName: string) => {
       if (providerName === 'openai' && providers.openai) return providers.openai(modelName);
       if (providerName === 'anthropic' && providers.anthropic) return providers.anthropic(modelName);
       if (providerName === 'gemini' && providers.google) return providers.google(modelName);
+      if (providerName === 'openrouter' && providers.openrouter) return providers.openrouter(modelName);
       return null;
     };
 
@@ -45,7 +52,11 @@ export async function POST(req: Request) {
 
     // 4. Hakem Ajanın sizin özel kriterlerinize göre süzme yaptığı alan
     let refereeText = "Hakem analizi için yeterli veri alınamadı.";
-    const refereeModel = providers.openai ? providers.openai('gpt-4o') : (providers.anthropic ? providers.anthropic('claude-3-5-sonnet-20241022') : null);
+    const refereeModel = config?.referee?.provider && config?.referee?.model
+      ? getModelInstance(config.referee.provider, config.referee.model)
+      : (providers.openai ? providers.openai('gpt-4o') :
+         providers.openrouter ? providers.openrouter('openai/gpt-4o') :
+         providers.anthropic ? providers.anthropic('claude-3-5-sonnet-20241022') : null);
 
     if (refereeModel && (resA.status === 'fulfilled' || resB.status === 'fulfilled' || resC.status === 'fulfilled')) {
       const refereePrompt = `
