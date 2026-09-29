@@ -480,149 +480,145 @@ ${results.agentC}
                 })}
               </div>
             </div>
+
+            {/* 3. Harici Hafıza ve Çalışma Düzeni Kriterleri */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2 border-t border-slate-700/50">
+              {/* Harici Hafıza (Memory) */}
+              <div
+                className={`p-4 rounded-xl border flex flex-col gap-3 ${
+                  isDark ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold flex items-center gap-2 text-blue-500">
+                    <Database size={18} /> 3. Harici Hafıza (Memory)
+                  </h3>
+
+                  {/* Import / Export File Buttons */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      accept=".txt,.md,.json,.csv"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`p-1.5 rounded-lg border text-xs flex items-center gap-1 transition-colors ${
+                        isDark
+                          ? 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300'
+                          : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-700'
+                      }`}
+                      title="Dosyadan Aktar (.txt, .md, .json)"
+                    >
+                      <Upload size={14} />
+                      <span className="hidden sm:inline">İçeri Aktar</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleExportMemory}
+                      disabled={!memory.trim()}
+                      className={`p-1.5 rounded-lg border text-xs flex items-center gap-1 transition-colors disabled:opacity-40 ${
+                        isDark
+                          ? 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300'
+                          : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-700'
+                      }`}
+                      title="Hafızayı Dosya Olarak İndir"
+                    >
+                      <Download size={14} />
+                      <span className="hidden sm:inline">Dışarı Aktar</span>
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  value={memory}
+                  onChange={(e) => {
+                    setMemory(e.target.value);
+                    localStorage.setItem('ai_consensus_memory', e.target.value);
+                  }}
+                  placeholder="Ajanlara aktarılacak doküman özeti, geçmiş bağlam veya kuralları buraya yapıştırın veya dosya yükleyin..."
+                  className={`w-full min-h-[140px] border rounded-xl p-3 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y leading-relaxed ${
+                    isDark
+                      ? 'bg-slate-900 border-slate-800 text-slate-200 placeholder-slate-600'
+                      : 'bg-white border-slate-300 text-slate-800 placeholder-slate-400'
+                  }`}
+                />
+              </div>
+
+              {/* Çalışma Düzeni Kriterleri */}
+              <div
+                className={`p-4 rounded-xl border flex flex-col gap-3 ${
+                  isDark ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold flex items-center gap-2 text-emerald-500">
+                    <ClipboardCheck size={18} /> 4. Çalışma Düzeni Kriterleri
+                  </h3>
+                </div>
+
+                <textarea
+                  value={evaluationCriteria}
+                  onChange={(e) => {
+                    setEvaluationCriteria(e.target.value);
+                    localStorage.setItem('ai_consensus_criteria', e.target.value);
+                  }}
+                  placeholder="Hakemin değerlendirme kurallarını girin. Örn: Kod yazarken DRY standartlarına uy, çelişkileri belirt, net ve Türkçe yanıtlar ver..."
+                  className={`w-full min-h-[140px] border rounded-xl p-3 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y leading-relaxed ${
+                    isDark
+                      ? 'bg-slate-900 border-slate-800 text-slate-200 placeholder-slate-600'
+                      : 'bg-white border-slate-300 text-slate-800 placeholder-slate-400'
+                  }`}
+                />
+              </div>
+            </div>
           </div>
         )}
 
-        {/* MAIN WORKING AREA GRID */}
-        {/* Requirement 6: Çalışma düzeni kriterleri ve hafıza alt alta aynı genişlikte olsun */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* LEFT SECTION (Col 12 on mobile/tablet, Col 5 on lg): Memory and Working Criteria stacked vertically with equal width */}
-          <div className="lg:col-span-5 flex flex-col gap-6">
-            {/* 1. HARİCİ HAFIZA (MEMORY) */}
-            <div
-              className={`border rounded-2xl p-5 flex flex-col gap-3 transition-colors ${
-                isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+        {/* MAIN WORKING AREA - PROMPT INPUT */}
+        <div
+          className={`border rounded-2xl p-5 flex flex-col justify-between gap-4 transition-colors ${
+            isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+          }`}
+        >
+          <div className="space-y-2">
+            <h2 className={`font-semibold text-sm flex items-center gap-2 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+              <Bot size={18} className="text-blue-500" /> Ana Sorgu / Soru
+            </h2>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Ajanların analiz etmesini ve yanıtlamasını istediğiniz ana soruyu ayrıntılı bir şekilde buraya yazın..."
+              className={`w-full min-h-[200px] border rounded-xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed resize-y ${
+                isDark
+                  ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-600'
+                  : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
               }`}
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-sm flex items-center gap-2 text-blue-500">
-                  <Database size={18} /> Harici Hafıza (Memory)
-                </h2>
-
-                {/* Import / Export File Buttons */}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    accept=".txt,.md,.json,.csv"
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`p-1.5 rounded-lg border text-xs flex items-center gap-1 transition-colors ${
-                      isDark
-                        ? 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300'
-                        : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-700'
-                    }`}
-                    title="Dosyadan Aktar (.txt, .md, .json)"
-                  >
-                    <Upload size={14} />
-                    <span className="hidden sm:inline">İçeri Aktar</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleExportMemory}
-                    disabled={!memory.trim()}
-                    className={`p-1.5 rounded-lg border text-xs flex items-center gap-1 transition-colors disabled:opacity-40 ${
-                      isDark
-                        ? 'bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300'
-                        : 'bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-700'
-                    }`}
-                    title="Hafızayı Dosya Olarak İndir"
-                  >
-                    <Download size={14} />
-                    <span className="hidden sm:inline">Dışarı Aktar</span>
-                  </button>
-                </div>
-              </div>
-
-              <textarea
-                value={memory}
-                onChange={(e) => {
-                  setMemory(e.target.value);
-                  localStorage.setItem('ai_consensus_memory', e.target.value);
-                }}
-                placeholder="Ajanlara aktarılacak doküman özeti, geçmiş bağlam veya kuralları buraya yapıştırın veya dosya yükleyin..."
-                className={`w-full min-h-[160px] border rounded-xl p-3 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y leading-relaxed ${
-                  isDark
-                    ? 'bg-slate-950 border-slate-800 text-slate-200 placeholder-slate-600'
-                    : 'bg-slate-50 border-slate-300 text-slate-800 placeholder-slate-400'
-                }`}
-              />
-            </div>
-
-            {/* 2. ÇALIŞMA DÜZENİ KRİTERLERİ (ALT ALTA & AYNI GENİŞLİKTE) */}
-            <div
-              className={`border rounded-2xl p-5 flex flex-col gap-3 transition-colors ${
-                isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-sm flex items-center gap-2 text-emerald-500">
-                  <ClipboardCheck size={18} /> Çalışma Düzeni Kriterleri
-                </h2>
-              </div>
-
-              <textarea
-                value={evaluationCriteria}
-                onChange={(e) => {
-                  setEvaluationCriteria(e.target.value);
-                  localStorage.setItem('ai_consensus_criteria', e.target.value);
-                }}
-                placeholder="Hakemin değerlendirme kurallarını girin. Örn: Kod yazarken DRY standartlarına uy, çelişkileri belirt, net ve Türkçe yanıtlar ver..."
-                className={`w-full min-h-[160px] border rounded-xl p-3 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y leading-relaxed ${
-                  isDark
-                    ? 'bg-slate-950 border-slate-800 text-slate-200 placeholder-slate-600'
-                    : 'bg-slate-50 border-slate-300 text-slate-800 placeholder-slate-400'
-                }`}
-              />
-            </div>
+            />
           </div>
 
-          {/* RIGHT SECTION (Prompt Input Area) */}
-          <div
-            className={`lg:col-span-7 border rounded-2xl p-5 flex flex-col justify-between gap-4 transition-colors ${
-              isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-            }`}
-          >
-            <div className="space-y-2">
-              <h2 className={`font-semibold text-sm flex items-center gap-2 ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                <Bot size={18} className="text-blue-500" /> Ana Sorgu / Soru
-              </h2>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Ajanların analiz etmesini ve yanıtlamasını istediğiniz ana soruyu ayrıntılı bir şekilde buraya yazın..."
-                className={`w-full min-h-[310px] border rounded-xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed resize-y ${
-                  isDark
-                    ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-600'
-                    : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
-                }`}
-              />
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                onClick={handleSearch}
-                disabled={loading || !prompt.trim()}
-                className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white px-8 py-3 rounded-xl font-semibold text-sm transition-all shadow-md flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="animate-spin" size={18} />
-                    <span>Ajanlar Analiz Ediyor...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send size={18} />
-                    <span>Ajanları Çalıştır ve Konsensüs Sağla</span>
-                  </>
-                )}
-              </button>
-            </div>
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={handleSearch}
+              disabled={loading || !prompt.trim()}
+              className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white px-8 py-3 rounded-xl font-semibold text-sm transition-all shadow-md flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="animate-spin" size={18} />
+                  <span>Ajanlar Analiz Ediyor...</span>
+                </>
+              ) : (
+                <>
+                  <Send size={18} />
+                  <span>Ajanları Çalıştır ve Konsensüs Sağla</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
 
