@@ -1,16 +1,17 @@
 # AI Multi-Agent Consensus Web App (MVP)
 
-Bu proje, **Next.js 15 (App Router)**, **Tailwind CSS** ve **TypeScript** mimarisi üzerinde çalışan; harici hafıza (memory) aktarımı, dinamik sağlayıcı (provider) ayarları ve 3 farklı AI modelinin (OpenAI, Anthropic, Google Gemini) çıktılarını yan yana gösteren ve karşılaştıran çoklu ajan konsensüs uygulamasıdır.
+Bu proje, **Next.js 15 (App Router)**, **Tailwind CSS**, **TypeScript** ve **Vercel AI SDK (`ai`)** mimarisi üzerinde çalışan; harici hafıza (memory) aktarımı, dinamik sağlayıcı (provider) ayarları, OpenRouter entegrasyonu ve 3 farklı AI modelinin (OpenAI, Anthropic, Google Gemini, OpenRouter) çıktılarını yan yana gösteren ve hakem ajan ile konsensüs oluşturan çoklu ajan uygulamasıdır.
 
 ---
 
 ## 🚀 Özellikler
 
-- **Çoklu Ajan Desteği:** OpenAI, Anthropic (Claude) ve Google Gemini modellerini tek bir panelden yönetin.
-- **Harici Hafıza (Memory) Aktarımı:** Tüm ajanlara ortak bağlam, doküman özetleri veya kurallar iletin.
+- **Çoklu Ajan Desteği:** OpenAI, Anthropic (Claude), Google Gemini ve OpenRouter modellerini tek bir panelden yönetin.
+- **Hakem Konsensüs Ajanı:** Farklı modellerin yanıtlarını özel çalışma kriterlerinize göre analiz eder ve konsensüs raporu oluşturur.
+- **Harici Hafıza (Memory) Aktarımı:** Tüm ajanlara ortak bağlam, doküman özetleri veya kurallar iletin (`.txt`, `.md`, `.json`, `.csv` içeri aktarma ve dışarı aktarma desteği).
 - **Dinamik Sağlayıcı ve Model Ayarları:** Arayüz üzerinden API anahtarlarını, modelleri ve aktif ajanları dinamik olarak düzenleyin.
-- **Yan Yana Karşılaştırma:** Ajan çıktılarını eşzamanlı olarak panel görünümünde inceleyin.
-- **Docker Desteği:** Standalone Docker ve `docker-compose` ile tek komutla kolay dağıtım.
+- **Güvenlik Sertleştirmeleri:** Zod girdi doğrulaması, prompt injection koruma sınırlayıcıları, CSP ve güvenlik başlıkları.
+- **Docker Desteği:** Node 22 Alpine tabanlı standalone Docker ve `docker-compose` ile kolay ve güvenli dağıtım.
 
 ---
 
@@ -21,19 +22,20 @@ ai-consensus-mvp/
 ├── app/
 │   ├── api/
 │   │   └── consensus/
-│   │       └── route.ts       # Paralel AI sağlayıcı istekleri API rotası
+│   │       └── route.ts       # Paralel AI sağlayıcı istekleri ve Hakem Konsensüs API rotası
 │   ├── globals.css             # Global stil tanımlamaları
 │   ├── layout.tsx              # Kök düzen (Layout)
-│   └── page.tsx                # Karşılaştırma paneli ön yüzü
+│   └── page.tsx                # Karşılaştırma ve ayarlar paneli ön yüzü
 ├── public/                     # Statik dosyalar
 ├── .dockerignore               # Docker derleme dışı bırakılacak dosyalar
+├── .env.example                # Örnek ortam değişkenleri
 ├── docker-compose.yml          # Docker Compose konfigürasyonu
-├── Dockerfile                  # Çok aşamalı (multi-stage) Docker yapılandırması
-├── next.config.mjs             # Next.js konfigürasyonu (standalone output)
+├── Dockerfile                  # Multi-stage Dockerfile (Node 22)
+├── next.config.mjs             # Next.js konfigürasyonu (standalone output & security headers)
 ├── package.json                # Bağımlılıklar ve npm betikleri
 ├── tsconfig.json               # TypeScript konfigürasyonu
 ├── README.md                   # Proje dokümantasyonu
-└── ai-consensus-webapp.md     # Proje referans dokümanı
+└── ai-consensus-webapp.md     # Proje mimari referans dokümanı
 ```
 
 ---
@@ -66,7 +68,7 @@ docker run -d -p 3000:3000 --name ai-consensus-app ai-consensus-app
 
 ---
 
-### Yöntem 2: Yerel Geliştirme Ortamı (Node.js)
+### Yöntem 2: Yerel Geliştirme Ortamı (Node.js 22+)
 
 1. **Gerekli Bağımlılıkları Yükleyin:**
    ```bash
@@ -79,7 +81,7 @@ docker run -d -p 3000:3000 --name ai-consensus-app ai-consensus-app
    ```
    Tarayıcınızda `http://localhost:3000` adresini açın.
 
-3. **Üretim (Production) Derlemesi:**
+3. **Üretim (Production) Derlemesi ve Test:**
    ```bash
    npm run build
    npm run start
@@ -87,13 +89,13 @@ docker run -d -p 3000:3000 --name ai-consensus-app ai-consensus-app
 
 ---
 
-## 💡 Kullanım Rehberi
+## 💡 Kullanım ve Güvenlik Notları
 
-1. Uygulamayı açın ve sağ üstteki **"Model & API Ayarları"** butonuna tıklayın.
-2. Kullanmak istediğiniz AI sağlayıcılarının (OpenAI, Anthropic, Google Gemini) API anahtarlarını (API Key) girin ve aktif olmasını istediğiniz ajanları seçin.
-3. Sol taraftaki **"Harici Hafıza"** alanına modellerin dikkate almasını istediğiniz arka plan bilgilerini veya yönlendirmeleri yazın (opsiyonel).
-4. **"Sormak İstediğiniz Soru"** alanına sorunuzu yazıp **"Tüm Ajanlara Sor"** butonuna basın.
-5. Ajan yanıtlarını panel üzerinde yan yana karşılaştırın.
+1. Uygulamayı açın ve sağ üstteki **"Ayarlar & Modeller"** butonuna tıklayın.
+2. Kullanmak istediğiniz AI sağlayıcılarının (OpenAI, Anthropic, Google Gemini, OpenRouter) API anahtarlarını girin.
+3. API anahtarlarınız varsayılan olarak tarayıcınızın yerel depolama alanında (`localStorage`) tutulur ve yalnızca ilgili AI istekleri için API sunucunuza iletilir.
+4. Sol taraftaki **"Harici Hafıza"** alanına modellerin dikkate almasını istediğiniz arka plan bilgilerini yazın veya dosya yükleyin.
+5. **"Ana Sorgu / Soru"** alanına sorunuzu yazıp **"Ajanları Çalıştır ve Konsensüs Sağla"** butonuna basın.
 
 ---
 
