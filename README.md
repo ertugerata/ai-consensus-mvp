@@ -1,7 +1,7 @@
 dizin yapısı
 
 
-''ai-consensus-mvp/
+'ai-consensus-mvp/
 ├── package.json
 ├── tsconfig.json
 ├── tailwind.config.ts
@@ -11,4 +11,4 @@ dizin yapısı
     ├── page.tsx          (Gelişmiş Ön Yüz / Arayüz Kodları)
     └── api/
         └── consensus/
-            └── route.ts  (Paralel İşleme ve Hakem API Rotası)''
+            └── route.ts  (Paralel İşleme ve Hakem API Rotası)'
