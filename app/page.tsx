@@ -53,7 +53,7 @@ export default function Home() {
       });
     } catch (err) {
       console.error(err);
-    } finaly {
+    } finally {
       setLoading(false);
     }
   };

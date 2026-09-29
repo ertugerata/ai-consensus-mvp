@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { generateText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
-import { createGoogle } from '@ai-sdk/google';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
 export async function POST(req: Request) {
   try {
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const providers: Record<string, any> = {};
     if (apiKeys.openai) providers.openai = createOpenAI({ apiKey: apiKeys.openai });
     if (apiKeys.anthropic) providers.anthropic = createAnthropic({ apiKey: apiKeys.anthropic });
-    if (apiKeys.gemini) providers.google = createGoogle({ apiKey: apiKeys.gemini });
+    if (apiKeys.gemini) providers.google = createGoogleGenerativeAI({ apiKey: apiKeys.gemini });
 
     const getModelInstance = (providerName: string, modelName: string) => {
       if (providerName === 'openai' && providers.openai) return providers.openai(modelName);
