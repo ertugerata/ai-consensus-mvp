@@ -1,5 +1,5 @@
 # Base image
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -29,8 +29,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy public folder if exists, or create public directory
-COPY --from=builder /app/public* ./public/
+# Copy public folder
+COPY --from=builder /app/public ./public
 
 # Copy standalone output and static assets
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
@@ -42,5 +42,8 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
 CMD ["node", "server.js"]

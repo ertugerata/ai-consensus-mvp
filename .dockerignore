@@ -7,3 +7,5 @@ Dockerfile
 docker-compose.yml
 README.md
 ai-consensus-webapp.md
+.env*
+*.log
