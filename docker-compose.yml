@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  ai-consensus-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-consensus-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    restart: unless-stopped

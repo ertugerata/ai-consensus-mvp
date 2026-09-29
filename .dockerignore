@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+.gitignore
+Dockerfile
+.dockerignore
+docker-compose.yml
+README.md
+ai-consensus-webapp.md
