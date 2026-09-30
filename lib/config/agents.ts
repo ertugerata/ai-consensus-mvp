@@ -1,0 +1,81 @@
+import { ConfigState, AgentConfig, ProviderType } from '../types';
+
+export const PROVIDER_MODEL_PRESETS: Record<ProviderType, string[]> = {
+  openai: [
+    'gpt-4o',
+    'gpt-4o-mini',
+    'o1',
+    'o1-mini',
+    'o3-mini',
+  ],
+  anthropic: [
+    'claude-3-7-sonnet-20250219',
+    'claude-3-5-sonnet-20241022',
+    'claude-3-5-haiku-20241022',
+  ],
+  gemini: [
+    'gemini-2.0-flash',
+    'gemini-1.5-pro',
+    'gemini-1.5-flash',
+  ],
+  openrouter: [
+    'anthropic/claude-3.5-sonnet',
+    'deepseek/deepseek-r1',
+    'openai/gpt-4o-mini',
+    'openai/gpt-4o',
+    'google/gemini-2.0-flash-001',
+    'meta-llama/llama-3.3-70b-instruct',
+    'mistralai/mistral-large-2411',
+    'qwen/qwen-2.5-72b-instruct',
+  ],
+  ollama: [
+    'llama3.3',
+    'llama3.1',
+    'mistral',
+    'deepseek-r1',
+    'qwen2.5',
+    'phi4',
+  ],
+};
+
+export const DEFAULT_SYSTEM_PROMPTS = {
+  agentA: 'Sen analitik ve mantık odaklı bir AI asistanısın. Konuyu tarafsız, veriye dayalı ve adım adım inceleyerek açık yanıt ver.',
+  agentB: 'Sen yaratıcı ve eleştirel düşünen bir AI asistanısın. Farklı bakış açılarını, potansiyel riskleri ve alternatif çözümleri vurgula.',
+  agentC: 'Sen pratik, çözüm ve uygulama odaklı bir AI asistanısın. Somut örnekler, en iyi uygulamalar ve uygulanabilir adımlar sun.',
+  referee: 'Sen bağımsız bir Hakem ve Konsensüs Ajanısın. Tüm ajanların yanıtlarını ve eleştirilerini nesnel şekilde sentezleyerek nihai konsensüs raporunu oluştur.',
+};
+
+export const DEFAULT_CONFIG: ConfigState = {
+  agentA: {
+    id: 'agentA',
+    name: 'Ajan A',
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    systemPrompt: DEFAULT_SYSTEM_PROMPTS.agentA,
+    temperature: 0.7,
+  },
+  agentB: {
+    id: 'agentB',
+    name: 'Ajan B',
+    provider: 'anthropic',
+    model: 'claude-3-5-haiku-20241022',
+    systemPrompt: DEFAULT_SYSTEM_PROMPTS.agentB,
+    temperature: 0.7,
+  },
+  agentC: {
+    id: 'agentC',
+    name: 'Ajan C',
+    provider: 'openrouter',
+    model: 'deepseek/deepseek-r1',
+    systemPrompt: DEFAULT_SYSTEM_PROMPTS.agentC,
+    temperature: 0.7,
+  },
+  referee: {
+    id: 'referee',
+    name: 'Hakem Ajanı',
+    provider: 'openrouter',
+    model: 'anthropic/claude-3.5-sonnet',
+    systemPrompt: DEFAULT_SYSTEM_PROMPTS.referee,
+    temperature: 0.3,
+  },
+};
