@@ -1,17 +1,27 @@
-# AI Multi-Agent Consensus Web App (MVP)
+# AI Multi-Agent Harness & Consensus Suite
 
-Bu proje, **Next.js 15 (App Router)**, **Tailwind CSS**, **TypeScript** ve **Vercel AI SDK (`ai`)** mimarisi üzerinde çalışan; harici hafıza (memory) aktarımı, dinamik sağlayıcı (provider) ayarları, OpenRouter entegrasyonu ve 3 farklı AI modelinin (OpenAI, Anthropic, Google Gemini, OpenRouter) çıktılarını yan yana gösteren ve hakem ajan ile konsensüs oluşturan çoklu ajan uygulamasıdır.
+Bu proje, **Next.js 15 (App Router)**, **Tailwind CSS**, **TypeScript** ve **Vercel AI SDK** mimarisi üzerinde çalışan; OpenRouter, OpenAI, Anthropic, Google Gemini ve yerel **Ollama** modellerini destekleyen modüler bir **Multi-Agent Debate & Consensus Harness** sistemidir.
 
 ---
 
-## 🚀 Özellikler
+## 🚀 Öne Çıkan Özellikler
 
-- **Çoklu Ajan Desteği:** OpenAI, Anthropic (Claude), Google Gemini ve OpenRouter modellerini tek bir panelden yönetin.
-- **Hakem Konsensüs Ajanı:** Farklı modellerin yanıtlarını özel çalışma kriterlerinize göre analiz eder ve konsensüs raporu oluşturur.
-- **Harici Hafıza (Memory) Aktarımı:** Tüm ajanlara ortak bağlam, doküman özetleri veya kurallar iletin (`.txt`, `.md`, `.json`, `.csv` içeri aktarma ve dışarı aktarma desteği).
-- **Dinamik Sağlayıcı ve Model Ayarları:** Arayüz üzerinden API anahtarlarını, modelleri ve aktif ajanları dinamik olarak düzenleyin.
-- **Güvenlik Sertleştirmeleri:** Zod girdi doğrulaması, prompt injection koruma sınırlayıcıları, CSP ve güvenlik başlıkları.
-- **Docker Desteği:** Node 22 Alpine tabanlı standalone Docker ve `docker-compose` ile kolay ve güvenli dağıtım.
+- **Çok Aşamalı İş Akışı (Multi-Stage Debate Workflow):**
+  - **Aşama 1 (Divergence):** Tüm konfigüre edilmiş ajanların soruyu bağımsız olarak yanıtlaması.
+  - **Aşama 2 (Cross-Review / Critique):** Ajanların birbirlerinin yanıtlarını inceleyip eleştirel gözden geçirmeler sunması.
+  - **Aşama 3 (Synthesis / Aggregation):** Hakem (Judge) ajanın tüm girdi ve eleştirileri değerlendirip nihai konsensüs raporunu oluşturması.
+- **Genişletilebilir Provider ve Model Soyutlama Katmanı:**
+  - **OpenRouter Entegrasyonu:** Claude 3.5 Sonnet, DeepSeek-R1, Llama 3.3, Gemini 2.0 Flash, Qwen vb. yüzlerce modele tek noktadan erişim.
+  - **Yerel Model Desteği (Ollama):** Yerel makinenizde çalışan Ollama modelleri (`llama3.3`, `deepseek-r1` vb.) ile tam entegrasyon.
+  - **Direct AI Providers:** OpenAI, Anthropic, Google Gemini.
+- **Dinamik Ajan Yapılandırması:**
+  - Her ajan için bağımsız Sistem İstemi (System Prompt), Sıcaklık (Temperature), Sağlayıcı ve Model seçimi.
+- **Harici Hafıza (Memory) ve Kriter Desteği:**
+  - Ajanlara bağlam veya doküman aktarımı (`.txt`, `.md`, `.json`, `.csv` yükleme ve indirme desteği) ve özel çalışma kuralları tanımlama.
+- **Loglama, Maliyet ve Metrik İzleme:**
+  - Her aşama ve ajan için Latency (gecikme süresi) ve Token tüketimi izleme.
+- **Güvenlik Sertleştirmeleri:**
+  - Zod girdi doğrulaması, XML kaçışlı (`sanitizeXmlData`) prompt injection koruması, CSP ve Docker güvenlik sertleştirmeleri.
 
 ---
 
@@ -22,80 +32,91 @@ ai-consensus-mvp/
 ├── app/
 │   ├── api/
 │   │   └── consensus/
-│   │       └── route.ts       # Paralel AI sağlayıcı istekleri ve Hakem Konsensüs API rotası
-│   ├── globals.css             # Global stil tanımlamaları
-│   ├── layout.tsx              # Kök düzen (Layout)
-│   └── page.tsx                # Karşılaştırma ve ayarlar paneli ön yüzü
-├── public/                     # Statik dosyalar
-├── .dockerignore               # Docker derleme dışı bırakılacak dosyalar
-├── .env.example                # Örnek ortam değişkenleri
-├── docker-compose.yml          # Docker Compose konfigürasyonu
-├── Dockerfile                  # Multi-stage Dockerfile (Node 22)
-├── next.config.mjs             # Next.js konfigürasyonu (standalone output & security headers)
-├── package.json                # Bağımlılıklar ve npm betikleri
-├── tsconfig.json               # TypeScript konfigürasyonu
-├── README.md                   # Proje dokümantasyonu
-└── ai-consensus-webapp.md     # Proje mimari referans dokümanı
+│   │       └── route.ts         # Zod doğrulama ve Multi-Stage Harness API uç noktası
+│   ├── globals.css               # Global Tailwind CSS stilleri
+│   ├── layout.tsx                # Kök düzen (Layout)
+│   └── page.tsx                  # Execution Pipeline UI ve Ajan Ayarları Ön Yüzü
+├── lib/
+│   ├── config/
+│   │   └── agents.ts             # Varsayılan ajan ayarları ve model katalogları
+│   ├── harness/
+│   │   ├── engine.ts             # Çok aşamalı (Multi-Stage) tartışma harness motoru
+│   │   └── utils.ts              # XML sanitization ve hata temizleme yardımcıları
+│   ├── providers/
+│   │   ├── anthropic.ts          # Anthropic Provider entegrasyonu
+│   │   ├── factory.ts            # Dinamik Provider Fabrikası & API key yönetimi
+│   │   ├── google.ts             # Google Gemini Provider entegrasyonu
+│   │   ├── ollama.ts             # Yerel Ollama Provider entegrasyonu
+│   │   ├── openai.ts             # OpenAI Provider entegrasyonu
+│   │   └── openrouter.ts         # OpenRouter Provider entegrasyonu (Custom Headers)
+│   └── types.ts                  # Harness, Ajan ve Provider Tip Tanımlamaları
+├── public/                       # Statik dosyalar
+├── .dockerignore                 # Docker derleme dışı bırakılacak dosyalar
+├── .env.example                  # Örnek ortam değişkenleri
+├── ai-consensus-mvp-issues.md   # İnceleme raporu ve çözülen issue listesi
+├── docker-compose.yml            # Docker Compose konfigürasyonu
+├── Dockerfile                    # Multi-stage Dockerfile (Node 22 Alpine)
+├── next.config.mjs               # Standalone output ve CSP güvenlik başlıkları
+├── package.json                  # Bağımlılıklar ve npm betikleri
+├── TODO.md                       # Harness dönüşüm yol haritası
+└── tsconfig.json                 # TypeScript konfigürasyonu
 ```
 
 ---
 
 ## 🛠️ Kurulum ve Çalıştırma
 
-Projeyi yerel ortamınızda veya Docker konteyneri içerisinde çalıştırabilirsiniz.
+### Yöntem 1: Docker Compose (Tavsiye Edilen)
 
-### Yöntem 1: Docker ile Kurulum (Tavsiye Edilen)
+Ortam değişkenlerinizi `.env` dosyasına ekleyin (veya `.env.example` dosyasını kopyalayın):
+```bash
+cp .env.example .env
+```
 
-#### Docker Compose ile Çalıştırma:
+Konteyneri başlatın:
 ```bash
 docker-compose up -d --build
 ```
-Uygulama arka planda derlenecek ve çalışmaya başlayacaktır. Tarayıcınızda `http://localhost:3000` adresine giderek erişebilirsiniz.
-
-Konteyneri durdurmak için:
-```bash
-docker-compose down
-```
-
-#### Standalone Docker CLI ile Çalıştırma:
-```bash
-# Docker imajını oluşturun
-docker build -t ai-consensus-app .
-
-# Konteyneri başlatın
-docker run -d -p 3000:3000 --name ai-consensus-app ai-consensus-app
-```
+Uygulama `http://localhost:3000` adresinde çalışacaktır.
 
 ---
 
 ### Yöntem 2: Yerel Geliştirme Ortamı (Node.js 22+)
 
-1. **Gerekli Bağımlılıkları Yükleyin:**
+1. **Bağımlılıkları Yükleyin:**
    ```bash
-   npm install
+   npm ci
    ```
 
 2. **Geliştirme Sunucusunu Başlatın:**
    ```bash
    npm run dev
    ```
-   Tarayıcınızda `http://localhost:3000` adresini açın.
 
-3. **Üretim (Production) Derlemesi ve Test:**
+3. **Üretim Derlemesi ve Tip Kontrolü:**
    ```bash
    npm run build
-   npm run start
    ```
 
 ---
 
-## 💡 Kullanım ve Güvenlik Notları
+## 💡 Kullanım
 
-1. Uygulamayı açın ve sağ üstteki **"Ayarlar & Modeller"** butonuna tıklayın.
-2. Kullanmak istediğiniz AI sağlayıcılarının (OpenAI, Anthropic, Google Gemini, OpenRouter) API anahtarlarını girin.
-3. API anahtarlarınız varsayılan olarak tarayıcınızın yerel depolama alanında (`localStorage`) tutulur ve yalnızca ilgili AI istekleri için API sunucunuza iletilir.
-4. Sol taraftaki **"Harici Hafıza"** alanına modellerin dikkate almasını istediğiniz arka plan bilgilerini yazın veya dosya yükleyin.
-5. **"Ana Sorgu / Soru"** alanına sorunuzu yazıp **"Ajanları Çalıştır ve Konsensüs Sağla"** butonuna basın.
+1. **Ajan & Provider Ayarları:**
+   - Sağ üstteki **"Ajan & Provider Ayarları"** butonuna tıklayın.
+   - OpenRouter, OpenAI, Anthropic, Gemini API anahtarlarınızı veya Ollama adresinizi girin. API anahtarlarınızı dilerseniz sunucudaki `.env` dosyasından da otomatik olarak tanıtabilirsiniz.
+   - Her ajan için Sistem İstemi, Sıcaklık ve Model seçin (OpenRouter modelleri, DeepSeek-R1, Claude 3.5 Sonnet vb.).
+
+2. **Sorgu ve Tartışmayı Başlatma:**
+   - **Harici Hafıza** alanına belgelerinizi aktarın veya yapıştırın.
+   - **Ana Sorgu / Soru** alanına sorunuzu girin.
+   - **"Harness'ı Başlat ve Tartıştır"** butonuna basın.
+
+3. **Çok Aşamalı Sonuçları İnceleme:**
+   - **Aşama 1 (Divergence):** Tüm ajanların bağımsız ilk yanıtları.
+   - **Aşama 2 (Cross-Review):** Ajanların birbirlerinin yanıtlarına sunduğu eleştiriler.
+   - **Aşama 3 (Synthesis):** Hakem ajanın ürettiği nihai konsensüs raporu.
+   - **Raporu İndir (.md):** Tüm aşamaları ve token/süre metriklerini Markdown dosyası olarak indirin.
 
 ---
 
