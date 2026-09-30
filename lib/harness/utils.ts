@@ -1,13 +1,22 @@
 /**
- * Sanitizes text content to prevent XML tag injection breaks in system/user prompts.
+ * Sanitizes text content to prevent XML/HTML tag injection breaks in system/user prompts.
+ * Escapes tag-like constructs so malicious inputs cannot fake prompt boundary tags.
  */
 export function sanitizeXmlData(content: string): string {
   if (!content) return '';
-  return content
-    .replace(/<\/user_prompt>/gi, '&lt;/user_prompt&gt;')
-    .replace(/<\/memory_context>/gi, '&lt;/memory_context&gt;')
-    .replace(/<\/agent_[a-c]_response>/gi, '&lt;/agent_response&gt;')
-    .replace(/<\/cross_review>/gi, '&lt;/cross_review&gt;');
+  // Replace tag-like patterns matching any <...>-style text with escaped equivalents
+  return content.replace(/<\/?\s*[a-zA-Z_][a-zA-Z0-9_\-\s]*\/?>/gi, (match) => {
+    return match.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  });
+}
+
+/**
+ * Sanitizes identifiers like agent names or model names to prevent prompt injection or formatting corruption.
+ */
+export function sanitizeIdentifier(identifier: string, maxLength: number = 100): string {
+  if (!identifier) return '';
+  const sanitized = identifier.replace(/[<>\r\n]/g, '').trim();
+  return sanitized.slice(0, maxLength);
 }
 
 /**

@@ -7,21 +7,20 @@ Bu proje, **Next.js 15 (App Router)**, **Tailwind CSS**, **TypeScript** ve **Ver
 ## 🚀 Öne Çıkan Özellikler
 
 - **Çok Aşamalı İş Akışı (Multi-Stage Debate Workflow):**
-  - **Aşama 1 (Divergence):** Tüm konfigüre edilmiş ajanların soruyu bağımsız olarak yanıtlaması.
-  - **Aşama 2 (Cross-Review / Critique):** Ajanların birbirlerinin yanıtlarını inceleyip eleştirel gözden geçirmeler sunması.
+  - **Aşama 1 (Divergence):** Yapılandırılmış tüm ilk aşama ajanlarının soruyu bağımsız olarak yanıtlaması.
+  - **Aşama 2 (Cross-Review / Critique):** Ajanların hem kendi Aşama 1 yanıtlarını hem de diğer ajanların yanıtlarını inceleyip yapıcı eleştiri sunması.
   - **Aşama 3 (Synthesis / Aggregation):** Hakem (Judge) ajanın tüm girdi ve eleştirileri değerlendirip nihai konsensüs raporunu oluşturması.
 - **Genişletilebilir Provider ve Model Soyutlama Katmanı:**
-  - **OpenRouter Entegrasyonu:** Claude 3.5 Sonnet, DeepSeek-R1, Llama 3.3, Gemini 2.0 Flash, Qwen vb. yüzlerce modele tek noktadan erişim.
-  - **Yerel Model Desteği (Ollama):** Yerel makinenizde çalışan Ollama modelleri (`llama3.3`, `deepseek-r1` vb.) ile tam entegrasyon.
-  - **Direct AI Providers:** OpenAI, Anthropic, Google Gemini.
+  - **OpenRouter Entegrasyonu:** Claude 3.7 Sonnet, DeepSeek-R1, Llama 3.3, Gemini 2.0 Flash vb. yüzlerce modele tek noktadan erişim.
+  - **Yerel Model Desteği (Ollama):** Sunucu tarafı `OLLAMA_BASE_URL` konfigürasyonu ile SSRF korumalı yerel model entegrasyonu.
+  - **Doğrudan Sağlayıcılar:** OpenAI, Anthropic, Google Gemini.
 - **Dinamik Ajan Yapılandırması:**
   - Her ajan için bağımsız Sistem İstemi (System Prompt), Sıcaklık (Temperature), Sağlayıcı ve Model seçimi.
 - **Harici Hafıza (Memory) ve Kriter Desteği:**
   - Ajanlara bağlam veya doküman aktarımı (`.txt`, `.md`, `.json`, `.csv` yükleme ve indirme desteği) ve özel çalışma kuralları tanımlama.
-- **Loglama, Maliyet ve Metrik İzleme:**
-  - Her aşama ve ajan için Latency (gecikme süresi) ve Token tüketimi izleme.
 - **Güvenlik Sertleştirmeleri:**
-  - Zod girdi doğrulaması, XML kaçışlı (`sanitizeXmlData`) prompt injection koruması, CSP ve Docker güvenlik sertleştirmeleri.
+  - Zod tek kaynaklı tip ve girdi doğrulaması (`lib/types.ts`), SSRF korumaları, API rate limit (10 istek/dk), `maxTokens` ve deadline zaman bütçesi yönetimi.
+  - Tümüyle kaçışlanmış XML verileri ve Sistem İstemi düzeyinde prompt injection koruması (`SYSTEM_SECURITY_DIRECTIVE`).
 
 ---
 
@@ -32,7 +31,7 @@ ai-consensus-mvp/
 ├── app/
 │   ├── api/
 │   │   └── consensus/
-│   │       └── route.ts         # Zod doğrulama ve Multi-Stage Harness API uç noktası
+│   │       └── route.ts         # Zod doğrulama, Rate Limit ve Multi-Stage Harness API uç noktası
 │   ├── globals.css               # Global Tailwind CSS stilleri
 │   ├── layout.tsx                # Kök düzen (Layout)
 │   └── page.tsx                  # Execution Pipeline UI ve Ajan Ayarları Ön Yüzü
@@ -48,14 +47,15 @@ ai-consensus-mvp/
 │   │   ├── google.ts             # Google Gemini Provider entegrasyonu
 │   │   ├── ollama.ts             # Yerel Ollama Provider entegrasyonu
 │   │   ├── openai.ts             # OpenAI Provider entegrasyonu
-│   │   └── openrouter.ts         # OpenRouter Provider entegrasyonu (Custom Headers)
-│   └── types.ts                  # Harness, Ajan ve Provider Tip Tanımlamaları
+│   │   └── openrouter.ts         # OpenRouter Provider entegrasyonu
+│   └── types.ts                  # Zod Şemaları, Harness ve Ajan Tip Tanımlamaları
 ├── public/                       # Statik dosyalar
 ├── .dockerignore                 # Docker derleme dışı bırakılacak dosyalar
 ├── .env.example                  # Örnek ortam değişkenleri
-├── ai-consensus-mvp-issues.md   # İnceleme raporu ve çözülen issue listesi
+├── ai-consensus-mvp-issues.md   # İnceleme raporu
 ├── docker-compose.yml            # Docker Compose konfigürasyonu
 ├── Dockerfile                    # Multi-stage Dockerfile (Node 22 Alpine)
+├── LICENSE                       # MIT Lisans belgesi
 ├── next.config.mjs               # Standalone output ve CSP güvenlik başlıkları
 ├── package.json                  # Bağımlılıklar ve npm betikleri
 ├── TODO.md                       # Harness dönüşüm yol haritası
@@ -100,26 +100,6 @@ Uygulama `http://localhost:3000` adresinde çalışacaktır.
 
 ---
 
-## 💡 Kullanım
-
-1. **Ajan & Provider Ayarları:**
-   - Sağ üstteki **"Ajan & Provider Ayarları"** butonuna tıklayın.
-   - OpenRouter, OpenAI, Anthropic, Gemini API anahtarlarınızı veya Ollama adresinizi girin. API anahtarlarınızı dilerseniz sunucudaki `.env` dosyasından da otomatik olarak tanıtabilirsiniz.
-   - Her ajan için Sistem İstemi, Sıcaklık ve Model seçin (OpenRouter modelleri, DeepSeek-R1, Claude 3.5 Sonnet vb.).
-
-2. **Sorgu ve Tartışmayı Başlatma:**
-   - **Harici Hafıza** alanına belgelerinizi aktarın veya yapıştırın.
-   - **Ana Sorgu / Soru** alanına sorunuzu girin.
-   - **"Harness'ı Başlat ve Tartıştır"** butonuna basın.
-
-3. **Çok Aşamalı Sonuçları İnceleme:**
-   - **Aşama 1 (Divergence):** Tüm ajanların bağımsız ilk yanıtları.
-   - **Aşama 2 (Cross-Review):** Ajanların birbirlerinin yanıtlarına sunduğu eleştiriler.
-   - **Aşama 3 (Synthesis):** Hakem ajanın ürettiği nihai konsensüs raporu.
-   - **Raporu İndir (.md):** Tüm aşamaları ve token/süre metriklerini Markdown dosyası olarak indirin.
-
----
-
 ## 📝 Lisans
 
-MIT
+[MIT](LICENSE)

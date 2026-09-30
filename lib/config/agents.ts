@@ -1,12 +1,12 @@
-import { ConfigState, AgentConfig, ProviderType } from '../types';
+import { ConfigState, ProviderType } from '../types';
 
 export const PROVIDER_MODEL_PRESETS: Record<ProviderType, string[]> = {
   openai: [
-    'gpt-4o',
     'gpt-4o-mini',
-    'o1',
-    'o1-mini',
+    'gpt-4o',
     'o3-mini',
+    'o1-mini',
+    'o1',
   ],
   anthropic: [
     'claude-3-7-sonnet-20250219',
@@ -19,21 +19,21 @@ export const PROVIDER_MODEL_PRESETS: Record<ProviderType, string[]> = {
     'gemini-1.5-flash',
   ],
   openrouter: [
+    'anthropic/claude-3.7-sonnet',
     'anthropic/claude-3.5-sonnet',
     'deepseek/deepseek-r1',
     'openai/gpt-4o-mini',
     'openai/gpt-4o',
     'google/gemini-2.0-flash-001',
     'meta-llama/llama-3.3-70b-instruct',
-    'mistralai/mistral-large-2411',
     'qwen/qwen-2.5-72b-instruct',
   ],
   ollama: [
     'llama3.3',
     'llama3.1',
-    'mistral',
     'deepseek-r1',
     'qwen2.5',
+    'mistral',
     'phi4',
   ],
 };
