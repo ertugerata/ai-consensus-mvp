@@ -24,7 +24,7 @@ import {
   MessageSquare,
   Zap,
   Sliders,
-  ChevronRight,
+  Server,
 } from 'lucide-react';
 import {
   ApiKeys,
@@ -42,7 +42,6 @@ const DEFAULT_KEYS: ApiKeys = {
   anthropic: '',
   gemini: '',
   openrouter: '',
-  ollamaBaseUrl: 'http://localhost:11434',
 };
 
 const MAX_PROMPT_CHARS = 20000;
@@ -189,6 +188,13 @@ export default function Home() {
     const s2 = stageResults.stage2CrossReview || {};
     const s3 = stageResults.stage3Synthesis || {};
 
+    const formatAgentResult = (res?: AgentExecutionResult) => {
+      if (!res) return 'Yanıt yok';
+      if (res.status === 'rejected') return `Hata: ${res.error || 'Ajan yanıt üretirken hata oluştu'}`;
+      if (res.status === 'skipped') return `Atlandı: ${res.error || 'İşlem atlandı'}`;
+      return res.text || 'Yanıt yok';
+    };
+
     const markdownContent = `# Multi-Agent Harness Consensus Raporu
 
 **Tarih:** ${timestamp}
@@ -206,13 +212,13 @@ export default function Home() {
 ## 2. Aşama 1: Bağımsız Ajan Yanıtları (Divergence)
 
 ### Ajan A (${config.agentA.provider.toUpperCase()} - ${config.agentA.model})
-${s1.agentA?.text || 'Yanıt yok'}
+${formatAgentResult(s1.agentA)}
 
 ### Ajan B (${config.agentB.provider.toUpperCase()} - ${config.agentB.model})
-${s1.agentB?.text || 'Yanıt yok'}
+${formatAgentResult(s1.agentB)}
 
 ### Ajan C (${config.agentC.provider.toUpperCase()} - ${config.agentC.model})
-${s1.agentC?.text || 'Yanıt yok'}
+${formatAgentResult(s1.agentC)}
 
 ---
 
@@ -221,8 +227,8 @@ ${
   s2 && Object.keys(s2).length > 0
     ? Object.entries(s2)
         .map(
-          ([id, res]) =>
-            `### ${res.agentName} Eleştirisi (${res.provider.toUpperCase()} - ${res.model})\n${res.text}`
+          ([, res]) =>
+            `### ${res.agentName} Eleştirisi (${res.provider.toUpperCase()} - ${res.model})\n${formatAgentResult(res)}`
         )
         .join('\n\n')
     : 'Aşama 2 (Çapraz Eleştiri) devre dışı bırakıldı veya çalıştırılmadı.'
@@ -232,7 +238,7 @@ ${
 
 ## 4. Aşama 3: Hakem Konsensüs Raporu (Synthesis)
 **Hakem Model:** ${s3.provider?.toUpperCase() || ''} - ${s3.model || ''}
-${s3.text || 'Sentez yok'}
+${formatAgentResult(s3)}
 `;
 
     const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
@@ -246,13 +252,15 @@ ${s3.text || 'Sentez yok'}
 
   const handleCopyMarkdown = async () => {
     if (!stageResults) return;
-    const s3 = stageResults.stage3Synthesis?.text || '';
+    const s3Text = stageResults.stage3Synthesis?.status === 'fulfilled'
+      ? stageResults.stage3Synthesis.text
+      : stageResults.stage3Synthesis?.error || '';
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(s3);
+        await navigator.clipboard.writeText(s3Text);
       } else {
         const textarea = document.createElement('textarea');
-        textarea.value = s3;
+        textarea.value = s3Text;
         document.body.appendChild(textarea);
         textarea.select();
         document.execCommand('copy');
@@ -288,6 +296,9 @@ ${s3.text || 'Sentez yok'}
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.results) {
+          setStageResults(data.results);
+        }
         setErrorMessage(data.error || `Sunucu hatası: ${res.status}`);
         return;
       }
@@ -300,6 +311,28 @@ ${s3.text || 'Sentez yok'}
     } finally {
       setLoading(false);
     }
+  };
+
+  const renderExecutionResultText = (res?: AgentExecutionResult) => {
+    if (!res) return 'Ajan çıktısı bulunmuyor.';
+    if (res.status === 'rejected') {
+      return (
+        <div className="text-red-400 space-y-1">
+          <div className="font-semibold flex items-center gap-1.5">
+            <AlertCircle size={14} /> Hata Oluştu
+          </div>
+          <div>{res.error || 'Bilinmeyen hata'}</div>
+        </div>
+      );
+    }
+    if (res.status === 'skipped') {
+      return (
+        <div className="text-amber-400/90 italic">
+          {res.error || 'Aşama atlandı.'}
+        </div>
+      );
+    }
+    return res.text || 'Yanıt yok.';
   };
 
   const isDark = theme === 'dark';
@@ -402,15 +435,14 @@ ${s3.text || 'Sentez yok'}
             {/* API Keys & Provider Endpoint Settings */}
             <div>
               <h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                1. Provider API Anahtarları ve Bağlantıları
+                1. Provider API Anahtarları
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
                 {[
                   { key: 'openrouter' as const, label: 'OpenRouter API Key', placeholder: 'sk-or-v1-...' },
                   { key: 'openai' as const, label: 'OpenAI API Key', placeholder: 'sk-...' },
                   { key: 'anthropic' as const, label: 'Anthropic API Key', placeholder: 'sk-ant-...' },
                   { key: 'gemini' as const, label: 'Google Gemini Key', placeholder: 'AIzaSy...' },
-                  { key: 'ollamaBaseUrl' as const, label: 'Ollama Base URL', placeholder: 'http://localhost:11434' },
                 ].map((item) => (
                   <div key={item.key} className="flex flex-col gap-1.5">
                     <label htmlFor={`api-key-${item.key}`} className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
@@ -419,7 +451,7 @@ ${s3.text || 'Sentez yok'}
                     <div className="relative">
                       <input
                         id={`api-key-${item.key}`}
-                        type={item.key === 'ollamaBaseUrl' ? 'text' : showKeys ? 'text' : 'password'}
+                        type={showKeys ? 'text' : 'password'}
                         value={apiKeys[item.key] || ''}
                         onChange={(e) =>
                           setApiKeys({ ...apiKeys, [item.key]: e.target.value })
@@ -431,19 +463,26 @@ ${s3.text || 'Sentez yok'}
                             : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
                         }`}
                       />
-                      {item.key !== 'ollamaBaseUrl' && (
-                        <button
-                          type="button"
-                          aria-label={showKeys ? 'API Anahtarlarını gizle' : 'API Anahtarlarını göster'}
-                          onClick={() => setShowKeys(!showKeys)}
-                          className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-200"
-                        >
-                          {showKeys ? <EyeOff size={14} /> : <Eye size={14} />}
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        aria-label={showKeys ? 'API Anahtarlarını gizle' : 'API Anahtarlarını göster'}
+                        onClick={() => setShowKeys(!showKeys)}
+                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-200"
+                      >
+                        {showKeys ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
                     </div>
                   </div>
                 ))}
+              </div>
+
+              <div className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                isDark ? 'bg-slate-950/80 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
+              }`}>
+                <Server size={16} className="text-blue-400 shrink-0" />
+                <span>
+                  <strong>Ollama Yapılandırması:</strong> SSRF koruması gereği yerel Ollama bağlantı adresi sunucu tarafında <code>OLLAMA_BASE_URL</code> ortam değişkeni ile belirlenir.
+                </span>
               </div>
             </div>
 
@@ -805,7 +844,7 @@ ${s3.text || 'Sentez yok'}
                 <div>
                   <h3 className="text-sm font-bold">Harness İş Akışı Tamamlandı</h3>
                   <p className="text-xs text-slate-400">
-                    Tüm aşamalar başarıyla yürütüldü.
+                    İşlem sonuçları ve metrikler aşağıda listelenmiştir.
                   </p>
                 </div>
               </div>
@@ -909,7 +948,7 @@ ${s3.text || 'Sentez yok'}
                             : 'bg-slate-50 border-slate-200 text-slate-700'
                         }`}
                       >
-                        {res?.text || 'Ajan yanıt veremedi veya çalıştırılmadı.'}
+                        {renderExecutionResultText(res)}
                       </div>
                     </div>
                   );
@@ -958,7 +997,7 @@ ${s3.text || 'Sentez yok'}
                             : 'bg-slate-50 border-slate-200 text-slate-700'
                         }`}
                       >
-                        {res?.text || 'Aşama 2 çapraz eleştiri çıktısı bulunmuyor.'}
+                        {renderExecutionResultText(res)}
                       </div>
                     </div>
                   );
@@ -1030,7 +1069,7 @@ ${s3.text || 'Sentez yok'}
                       : 'bg-white border-slate-200 text-slate-900 shadow-inner'
                   }`}
                 >
-                  {stageResults.stage3Synthesis?.text || 'Konsensüs üretilemedi.'}
+                  {renderExecutionResultText(stageResults.stage3Synthesis)}
                 </div>
               </div>
             )}

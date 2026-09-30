@@ -17,7 +17,8 @@ export function getEffectiveApiKey(provider: ProviderType, apiKeys: ApiKeys = {}
     case 'openrouter':
       return apiKeys.openrouter || process.env.OPENROUTER_API_KEY || null;
     case 'ollama':
-      return apiKeys.ollamaBaseUrl || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+      // SSRF Protection: Ollama URL must be configured strictly on the server via OLLAMA_BASE_URL.
+      return process.env.OLLAMA_BASE_URL || null;
     default:
       return null;
   }

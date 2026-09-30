@@ -1,42 +1,46 @@
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
+import { RequestBodySchema } from '@/lib/types';
 import { runMultiStageHarness } from '@/lib/harness/engine';
 
 export const maxDuration = 60;
 
-const ProviderSchema = z.enum(['openai', 'anthropic', 'gemini', 'openrouter', 'ollama']);
+// Simple in-memory rate limiter per IP/client
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const MAX_REQUESTS_PER_WINDOW = 10;
 
-const AgentConfigSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().optional(),
-  provider: ProviderSchema,
-  model: z.string().min(1, 'Model adı boş olamaz').max(150),
-  systemPrompt: z.string().max(10000).optional(),
-  temperature: z.number().min(0).max(2).optional(),
-});
+function checkRateLimit(clientIp: string): boolean {
+  const now = Date.now();
+  const record = rateLimitMap.get(clientIp);
 
-const RequestBodySchema = z.object({
-  prompt: z.string().min(1, 'Soru boş olamaz').max(20000, 'Soru 20.000 karakterden uzun olamaz'),
-  memory: z.string().max(200000, 'Hafıza 200.000 karakterden uzun olamaz').optional().default(''),
-  evaluationCriteria: z.string().max(20000, 'Kriterler 20.000 karakterden uzun olamaz').optional().default(''),
-  apiKeys: z.object({
-    openai: z.string().optional().default(''),
-    anthropic: z.string().optional().default(''),
-    gemini: z.string().optional().default(''),
-    openrouter: z.string().optional().default(''),
-    ollamaBaseUrl: z.string().optional().default(''),
-  }).optional().default({}),
-  config: z.object({
-    agentA: AgentConfigSchema,
-    agentB: AgentConfigSchema,
-    agentC: AgentConfigSchema,
-    referee: AgentConfigSchema,
-  }),
-  enableCrossReview: z.boolean().optional().default(true),
-});
+  // Clean up stale entries periodically if map grows too large
+  if (rateLimitMap.size > 10000) {
+    rateLimitMap.clear();
+  }
+
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(clientIp, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+
+  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
+    return true;
+  }
+
+  record.count += 1;
+  return false;
+}
 
 export async function POST(req: Request) {
   try {
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'anonymous';
+    if (checkRateLimit(clientIp)) {
+      return NextResponse.json(
+        { error: 'Çok fazla istek gönderildi. Lütfen bir dakika bekledikten sonra tekrar deneyin.' },
+        { status: 429 }
+      );
+    }
+
     const contentType = req.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
       return NextResponse.json(
@@ -70,19 +74,23 @@ export async function POST(req: Request) {
       enableCrossReview
     );
 
-    // Extract backwards-compatible top-level properties for legacy frontend/API consumers
-    const agentA = harnessResults.stage1Divergence.agentA?.text || '';
-    const agentB = harnessResults.stage1Divergence.agentB?.text || '';
-    const agentC = harnessResults.stage1Divergence.agentC?.text || '';
-    const consensus = harnessResults.stage3Synthesis.text || '';
+    // If stage 3 synthesis failed and stage 1 has no fulfilled results, return HTTP 502 error
+    if (harnessResults.stage3Synthesis.status === 'rejected') {
+      const stage1Fulfilled = Object.values(harnessResults.stage1Divergence).some(
+        (r) => r.status === 'fulfilled'
+      );
+      if (!stage1Fulfilled) {
+        return NextResponse.json(
+          {
+            error: harnessResults.stage3Synthesis.error || 'Tüm ajanlar yanıt üretmekte başarısız oldu.',
+            results: harnessResults,
+          },
+          { status: 502 }
+        );
+      }
+    }
 
-    return NextResponse.json({
-      agentA,
-      agentB,
-      agentC,
-      consensus,
-      ...harnessResults,
-    });
+    return NextResponse.json(harnessResults, { status: 200 });
   } catch (error: unknown) {
     console.error('Unhandled server error in /api/consensus:', error);
     return NextResponse.json(
