@@ -46,30 +46,32 @@ export const DEFAULT_SYSTEM_PROMPTS = {
 };
 
 export const DEFAULT_CONFIG: ConfigState = {
-  agentA: {
-    id: 'agentA',
-    name: 'Ajan A',
-    provider: 'openai',
-    model: 'gpt-4o-mini',
-    systemPrompt: DEFAULT_SYSTEM_PROMPTS.agentA,
-    temperature: 0.7,
-  },
-  agentB: {
-    id: 'agentB',
-    name: 'Ajan B',
-    provider: 'anthropic',
-    model: 'claude-3-5-haiku-20241022',
-    systemPrompt: DEFAULT_SYSTEM_PROMPTS.agentB,
-    temperature: 0.7,
-  },
-  agentC: {
-    id: 'agentC',
-    name: 'Ajan C',
-    provider: 'openrouter',
-    model: 'deepseek/deepseek-r1',
-    systemPrompt: DEFAULT_SYSTEM_PROMPTS.agentC,
-    temperature: 0.7,
-  },
+  agents: [
+    {
+      id: 'agent_1',
+      name: 'Ajan 1',
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      systemPrompt: DEFAULT_SYSTEM_PROMPTS.agentA,
+      temperature: 0.7,
+    },
+    {
+      id: 'agent_2',
+      name: 'Ajan 2',
+      provider: 'anthropic',
+      model: 'claude-3-5-haiku-20241022',
+      systemPrompt: DEFAULT_SYSTEM_PROMPTS.agentB,
+      temperature: 0.7,
+    },
+    {
+      id: 'agent_3',
+      name: 'Ajan 3',
+      provider: 'openrouter',
+      model: 'deepseek/deepseek-r1',
+      systemPrompt: DEFAULT_SYSTEM_PROMPTS.agentC,
+      temperature: 0.7,
+    },
+  ],
   referee: {
     id: 'referee',
     name: 'Hakem Ajanı',

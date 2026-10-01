@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { RequestBodySchema } from '@/lib/types';
 import { runMultiStageHarness } from '@/lib/harness/engine';
+import { saveSession } from '@/lib/db';
 
 export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
 
 // Simple in-memory rate limiter per IP/client
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
@@ -62,7 +64,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Girdi doğrulama hatası: ${errorMessage}` }, { status: 400 });
     }
 
-    const { prompt, memory, evaluationCriteria, apiKeys, config, enableCrossReview } = parseResult.data;
+    const {
+      sessionId: requestedSessionId,
+      title,
+      prompt,
+      memory,
+      evaluationCriteria,
+      apiKeys,
+      config,
+      enableCrossReview,
+    } = parseResult.data;
 
     // Run Multi-Stage Harness Pipeline
     const harnessResults = await runMultiStageHarness(
@@ -73,6 +84,25 @@ export async function POST(req: Request) {
       config,
       enableCrossReview
     );
+
+    const activeSessionId = requestedSessionId || crypto.randomUUID();
+    harnessResults.sessionId = activeSessionId;
+
+    // Save session to SQLite database
+    try {
+      saveSession({
+        id: activeSessionId,
+        title: title || prompt.slice(0, 60).trim() || 'Yeni Oturum',
+        prompt,
+        memory,
+        evaluationCriteria,
+        config,
+        enableCrossReview,
+        results: harnessResults,
+      });
+    } catch (dbErr) {
+      console.error('Session veritabanına kaydedilirken hata oluştu:', dbErr);
+    }
 
     // If stage 3 synthesis failed and stage 1 has no fulfilled results, return HTTP 502 error
     if (harnessResults.stage3Synthesis.status === 'rejected') {
