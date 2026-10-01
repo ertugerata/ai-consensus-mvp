@@ -22,12 +22,34 @@ export const ApiKeysSchema = z.object({
 export type ApiKeys = z.infer<typeof ApiKeysSchema>;
 
 export const ConfigStateSchema = z.object({
-  agentA: AgentConfigSchema,
-  agentB: AgentConfigSchema,
-  agentC: AgentConfigSchema,
+  agents: z.array(AgentConfigSchema).min(2, 'En az 2 ajan tanımlanmalıdır').optional(),
+  agentA: AgentConfigSchema.optional(),
+  agentB: AgentConfigSchema.optional(),
+  agentC: AgentConfigSchema.optional(),
   referee: AgentConfigSchema,
 });
 export type ConfigState = z.infer<typeof ConfigStateSchema>;
+
+export function getPrimaryAgents(config: ConfigState): AgentConfig[] {
+  if (config.agents && Array.isArray(config.agents) && config.agents.length >= 2) {
+    return config.agents.map((ag, idx) => ({
+      ...ag,
+      id: ag.id || `agent_${idx + 1}`,
+      name: ag.name || `Ajan ${idx + 1}`,
+    }));
+  }
+  const fallback: AgentConfig[] = [];
+  if (config.agentA) fallback.push({ ...config.agentA, id: config.agentA.id || 'agentA', name: config.agentA.name || 'Ajan A' });
+  if (config.agentB) fallback.push({ ...config.agentB, id: config.agentB.id || 'agentB', name: config.agentB.name || 'Ajan B' });
+  if (config.agentC) fallback.push({ ...config.agentC, id: config.agentC.id || 'agentC', name: config.agentC.name || 'Ajan C' });
+
+  if (fallback.length >= 2) return fallback;
+
+  return [
+    { id: 'agent1', name: 'Ajan 1', provider: 'openai', model: 'gpt-4o-mini' },
+    { id: 'agent2', name: 'Ajan 2', provider: 'anthropic', model: 'claude-3-5-haiku-20241022' },
+  ];
+}
 
 export const UsageMetricsSchema = z.object({
   promptTokens: z.number().optional(),
@@ -53,6 +75,7 @@ export const AgentExecutionResultSchema = z.object({
 export type AgentExecutionResult = z.infer<typeof AgentExecutionResultSchema>;
 
 export const MultiStageResultsSchema = z.object({
+  sessionId: z.string().optional(),
   stage1Divergence: z.record(z.string(), AgentExecutionResultSchema),
   stage2CrossReview: z.record(z.string(), AgentExecutionResultSchema).optional(),
   stage3Synthesis: AgentExecutionResultSchema,
@@ -61,6 +84,8 @@ export const MultiStageResultsSchema = z.object({
 export type MultiStageResults = z.infer<typeof MultiStageResultsSchema>;
 
 export const RequestBodySchema = z.object({
+  sessionId: z.string().optional(),
+  title: z.string().max(200).optional(),
   prompt: z.string().min(1, 'Soru boş olamaz').max(20000, 'Soru 20.000 karakterden uzun olamaz'),
   memory: z.string().max(200000, 'Hafıza 200.000 karakterden uzun olamaz').optional().default(''),
   evaluationCriteria: z.string().max(20000, 'Kriterler 20.000 karakterden uzun olamaz').optional().default(''),
