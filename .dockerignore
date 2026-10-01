@@ -1,10 +1,38 @@
+# dependencies and build outputs
 node_modules
 .next
+out
+.out
+build
+
+# git and github
 .git
-.gitignore
+.github
+
+# database and persistent data
+data
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# documentation and markdown issues
+*.md
+TODO.md
+ai-consensus-mvp-issues.md
+
+# environment files and logs
+.env*
+!.env.example
+*.log
+npm-debug.log*
+
+# docker files
 Dockerfile
 .dockerignore
 docker-compose.yml
-README.md
-.env*
-*.log
+
+# OS & IDE files
+.DS_Store
+.idea
+.vscode
