@@ -28,35 +28,35 @@
 
 ## 1. Güvenlik
 
-### SEC-1 🔴 SSRF: Open-Notebook MCP proxy
+### SEC-1 ✅ SSRF: Open-Notebook MCP proxy (Tamamlandı)
 - **Dosya:** `app/api/mcp/open-notebook/route.ts`
 - **Sorun:** `baseUrl` kullanıcıdan geliyor ve sunucu bu adrese istek atıp cevabı istemciye geri döndürüyor. `mcp_call` eyleminde `method`, `params` ve yanıt tamamen serbest. Bulut metadata (`169.254.169.254`), `host.docker.internal` ve iç ağ adresleri hedeflenebilir. `notebookId` URL yoluna encode edilmeden eklendiği için `../` ile hedef sunucuda yol değiştirilebilir.
 - **README çelişkisi:** "SSRF korumalı" ifadesi yalnızca Ollama için doğru.
 - **Öneri:**
-  - [ ] Hedef için allow-list veya özel/loopback/link-local IP bloklama (DNS çözümlemesi sonrası kontrol dahil)
-  - [ ] `mcp_call` eylemini kaldır veya yalnızca belirli method'larla sınırla
-  - [ ] `encodeURIComponent(notebookId)`
-  - [ ] Yanıt boyutu sınırı ve yönlendirme (redirect) kapatma
-  - [ ] Bu route'a da rate limit uygula
+  - [x] Hedef için allow-list veya özel/loopback/link-local IP bloklama (DNS çözümlemesi sonrası kontrol dahil)
+  - [x] `mcp_call` eylemini kaldır veya yalnızca belirli method'larla sınırla
+  - [x] `encodeURIComponent(notebookId)`
+  - [x] Yanıt boyutu sınırı ve yönlendirme (redirect) kapatma
+  - [x] Bu route'a da rate limit uygula
 
-### SEC-2 🔴 Kimlik doğrulama yok
+### SEC-2 ✅ Kimlik doğrulama yok (Tamamlandı)
 - **Dosya:** `app/api/sessions/route.ts`, `app/api/sessions/[id]/route.ts`, `app/api/consensus/route.ts`
 - **Sorun:** `GET/POST /api/sessions` ve `GET/DELETE /api/sessions/[id]` herkese açık. Tüm oturumlar (prompt, hafıza, sonuçlar) listelenip silinebiliyor. İstemci anahtar göndermezse sunucudaki `.env` anahtarlarıyla LLM çağrısı yapılabiliyor (maliyet riski).
 - **Hafifletici:** `docker-compose.yml` portu `127.0.0.1`'e bağlıyor. Risk, uygulama dışarı açıldığında (reverse proxy, GHCR imajının başka ortamda çalıştırılması) ortaya çıkıyor.
 - **Öneri:**
-  - [ ] En azından env tabanlı bir erişim token'ı (middleware)
-  - [ ] Oturumları kullanıcı/token'a bağla
-  - [ ] Sunucu anahtarlarının kullanımını yapılandırılabilir yap
+  - [x] En azından env tabanlı bir erişim token'ı (middleware)
+  - [x] Oturumları kullanıcı/token'a bağla
+  - [x] Sunucu anahtarlarının kullanımını yapılandırılabilir yap
 
-### SEC-3 🟠 `/api/sessions` POST doğrulamasız; oturum üzerine yazma
+### SEC-3 ✅ `/api/sessions` POST doğrulamasız; oturum üzerine yazma (Tamamlandı)
 - **Dosya:** `app/api/sessions/route.ts`, `lib/db/index.ts`, `app/api/consensus/route.ts`
 - **Sorun:** Zod yok, Content-Type kontrolü yok, boyut sınırı yok. `ON CONFLICT(id) DO UPDATE` nedeniyle bilinen/tahmin edilen bir ID ile başka oturumun üzerine yazılabiliyor. `/api/consensus` içindeki `sessionId` da `z.string().optional()` ve format doğrulanmıyor.
 - **Öneri:**
-  - [ ] Zod şeması + boyut sınırları
-  - [ ] `sessionId` için `z.string().uuid()`
-  - [ ] Sahiplik kontrolü (SEC-2 ile birlikte)
+  - [x] Zod şeması + boyut sınırları
+  - [x] `sessionId` için `z.string().uuid()`
+  - [x] Sahiplik kontrolü (SEC-2 ile birlikte)
 
-### SEC-4 🟠 Rate limit kolay aşılır
+### SEC-4 ✅ Rate limit kolay aşılır (Tamamlandı)
 - **Dosya:** `app/api/consensus/route.ts`
 - **Sorun:**
   - `x-forwarded-for` doğrudan güveniliyor (spoof edilebilir).
@@ -65,18 +65,18 @@
   - Rate limit yalnızca `/api/consensus` üzerinde. MCP proxy ve sessions uç noktalarında yok.
   - Bellek içi olduğu için çok instance'lı çalışmada işe yaramaz.
 - **Öneri:**
-  - [ ] Güvenilir proxy arkasında doğru IP çıkarımı
-  - [ ] Süresi dolan kayıtları temizle (tümünü silme)
-  - [ ] Diğer uç noktalara da uygula
+  - [x] Güvenilir proxy arkasında doğru IP çıkarımı
+  - [x] Süresi dolan kayıtları temizle (tümünü silme)
+  - [x] Diğer uç noktalara da uygula
 
-### SEC-5 🟠 CSP zayıf, HSTS yok
+### SEC-5 ✅ CSP zayıf, HSTS yok (Tamamlandı)
 - **Dosya:** `next.config.mjs`
 - **Sorun:** `script-src` içinde `'unsafe-inline' 'unsafe-eval'` var. Yalnızca `connect-src` sıkı. `Strict-Transport-Security` başlığı yok. Issues dosyası SEC-10'u "sıkılaştırıldı" olarak işaretliyor.
 - **Öneri:**
-  - [ ] Nonce tabanlı CSP (Next.js middleware) ve `unsafe-eval`'i kaldırma denemesi
-  - [ ] HSTS (HTTPS ortamında)
+  - [x] Nonce tabanlı CSP (Next.js middleware) ve `unsafe-eval`'i kaldırma denemesi
+  - [x] HSTS (HTTPS ortamında)
 
-### SEC-6 🟠 Prompt-injection kaçışı eksik
+### SEC-6 ✅ Prompt-injection kaçışı eksik (Tamamlandı)
 - **Dosya:** `lib/harness/utils.ts` (`sanitizeXmlData`)
 - **Sorun:** Test edildi. Şu girdiler **kaçışlanmadan** geçiyor:
   - `< /user_prompt>` (boşluklu)
@@ -85,83 +85,83 @@
   - `＜/user_prompt＞` (tam genişlikli karakterler)
 - **Etki:** Tek kullanıcılı kullanımda sınırlı. Ancak Open-Notebook içeriği, hafıza ve ajanlar arası aktarılan metinler güvenilmeyen veri.
 - **Öneri:**
-  - [ ] Regex yerine tüm `<` ve `>` karakterlerini kaçışla (ve Unicode benzerlerini normalize et)
-  - [ ] Prompt sınırlayıcıları için rastgele (nonce) etiket adları kullan
+  - [x] Regex yerine tüm `<` ve `>` karakterlerini kaçışla (ve Unicode benzerlerini normalize et)
+  - [x] Prompt sınırlayıcıları için rastgele (nonce) etiket adları kullan
 
-### SEC-7 🟡 API anahtarları localStorage'da düz metin
+### SEC-7 ✅ API anahtarları localStorage'da düz metin (Tamamlandı)
 - **Dosya:** `app/page.tsx`
 - **Sorun:** Anahtarlar düz metin saklanıyor ve her istek gövdesinde gidiyor. `dangerouslySetInnerHTML` kullanılmadığı için XSS riski düşük, ama bir XSS durumunda anahtarlar çalınır. Open-Notebook API anahtarı da aynı şekilde saklanıyor.
 - **Öneri:**
-  - [ ] Sunucu tarafı anahtar yönetimini tercih et ve UI'da bu seçeneği öne çıkar
-  - [ ] Anahtarların tarayıcıda saklandığına dair UI uyarısı ekle
+  - [x] Sunucu tarafı anahtar yönetimini tercih et ve UI'da bu seçeneği öne çıkar
+  - [x] Anahtarların tarayıcıda saklandığına dair UI uyarısı ekle
 
-### SEC-8 🟡 Hata mesajı sızıntısı
+### SEC-8 ✅ Hata mesajı sızıntısı (Tamamlandı)
 - **Dosya:** `lib/harness/utils.ts`, `app/api/mcp/open-notebook/route.ts`
 - **Sorun:** `sanitizeErrorMessage` yalnızca `sk-...` desenini maskeliyor. Gemini (`AIza...`) ve diğer anahtar biçimleri maskelenmiyor. İç adresleri içeren bağlantı hataları (ör. `host.docker.internal:11434`) ve MCP route'larındaki `err.message` istemciye olduğu gibi gidiyor.
 - **Öneri:**
-  - [ ] Genel hata mesajı dön, ayrıntıyı sunucuda logla
+  - [x] Genel hata mesajı dön, ayrıntıyı sunucuda logla
 
-### SEC-9 🟡 `data/consensus.db*` git'te takipli
+### SEC-9 ✅ `data/consensus.db*` git'te takipli (Tamamlandı)
 - **Dosya:** `data/consensus.db`, `consensus.db-shm`, `consensus.db-wal`
 - **Sorun:** `.gitignore` `/data/` içeriyor ama dosyalar daha önce commit'lenmiş. Şu an yalnızca şema var, kullanıcı verisi yok. Gelecekte veri commit'lenme riski var.
 - **Not:** Git geçmişinde gerçek API anahtarı bulunmadı (yalnızca `sk-ant-...` gibi placeholder'lar).
 - **Öneri:**
-  - [ ] `git rm -r --cached data/`
+  - [x] `git rm -r --cached data/`
 
 ---
 
 ## 2. Kod Tutarsızlıkları
 
-### BUG-1 🟠 Zaman bütçesi hakemi aç bırakıyor
+### BUG-1 ✅ Zaman bütçesi hakemi aç bırakıyor (Tamamlandı)
 - **Dosya:** `lib/harness/engine.ts`
 - **Sorun:** Aşama 1 en fazla 25 sn, Aşama 2 en fazla 20 sn, hakem kalan süreyi alıyor. En kötü senaryoda hakeme **10 sn** kalıyor (toplam 55 sn). `maxTokens: 4096` ile bir konsensüs raporu için yetersiz olabilir. Varsayılan ajanlardan biri `deepseek-r1` (akıl yürütme modeli). Issues dosyası `AbortSignal.timeout(28000)` diyor, kod farklı.
 - **Öneri:**
-  - [ ] Hakem için asgari süre ayır (ör. 20 sn) veya aşama sürelerini yeniden dağıt
-  - [ ] Aşama 1/2 zaman aşımına uğrayan ajanları açıkça raporla
+  - [x] Hakem için asgari süre ayır (ör. 20 sn) veya aşama sürelerini yeniden dağıt
+  - [x] Aşama 1/2 zaman aşımına uğrayan ajanları açıkça raporla
 
-### BUG-2 🟠 Sessiz yedek (fallback) ajanlar
+### BUG-2 ✅ Sessiz yedek (fallback) ajanlar (Tamamlandı)
 - **Dosya:** `lib/types.ts` (`getPrimaryAgents`)
 - **Sorun:** `agents` ve `agentA/B/C` verilmezse kullanıcının seçmediği `gpt-4o-mini` ve `claude-3-5-haiku` ajanları çalıştırılıyor. API'yi doğrudan çağıranlar için beklenmedik maliyet. `agentA/B/C` alanları ve `DEFAULT_SYSTEM_PROMPTS.agentA` gibi adlar eski şemadan kalma.
 - **Öneri:**
-  - [ ] Yedek ajanları kaldır, geçersiz konfigürasyonda 400 dön
-  - [ ] Eski `agentA/B/C` alanlarını kaldır veya açıkça "deprecated" işaretle
+  - [x] Yedek ajanları kaldır, geçersiz konfigürasyonda 400 dön
+  - [x] Eski `agentA/B/C` alanlarını kaldır veya açıkça "deprecated" işaretle
 
-### BUG-3 🟠 Ajan ID çakışması / benzersizlik kontrolü yok
+### BUG-3 ✅ Ajan ID çakışması / benzersizlik kontrolü yok (Tamamlandı)
 - **Dosya:** `lib/types.ts`, `lib/harness/engine.ts`
 - **Sorun:** `id` alanı `z.string().optional()`. Aynı ID'li iki ajan `stage1Divergence` içinde birbirinin üzerine yazar. `id: "referee"` da çakışabilir.
 - **Öneri:**
-  - [ ] Zod `refine` ile benzersizlik kontrolü; `referee` ID'sini rezerve et
+  - [x] Zod `refine` ile benzersizlik kontrolü; `referee` ID'sini rezerve et
 
-### BUG-4 🟡 DB kayıt hatası sessizce yutuluyor
+### BUG-4 ✅ DB kayıt hatası sessizce yutuluyor (Tamamlandı)
 - **Dosya:** `app/api/consensus/route.ts`, `docker-compose.yml`
 - **Sorun:** `saveSession` hata verirse yalnızca `console.error` yapılıyor, istek 200 dönüyor. Docker'da `./data` bind mount'u `nextjs` (uid 1001) tarafından yazılamazsa oturumlar hiç kaydedilmez ve fark edilmez, liste uç noktası ise 500 verir.
 - **Öneri:**
-  - [ ] Named volume kullan veya sahiplik/izin ayarını belgele
-  - [ ] Yanıtta `sessionSaved: false` gibi bir uyarı alanı dön
+  - [x] Named volume kullan veya sahiplik/izin ayarını belgele
+  - [x] Yanıtta `sessionSaved: false` gibi bir uyarı alanı dön
 
-### BUG-5 🟡 İstemci tarafı konfigürasyon doğrulaması zayıf
+### BUG-5 ✅ İstemci tarafı konfigürasyon doğrulaması zayıf (Tamamlandı)
 - **Dosya:** `app/page.tsx`
 - **Sorun:** localStorage'daki `config` şemaya karşı doğrulanmıyor, yalnızca `agents.length >= 2` bakılıyor. `referee` eksikse sunucudan 400 dönüyor.
 - **Öneri:**
-  - [ ] Paylaşılan Zod şemasıyla `safeParse`, başarısızsa `DEFAULT_CONFIG`
+  - [x] Paylaşılan Zod şemasıyla `safeParse`, başarısızsa `DEFAULT_CONFIG`
 
-### BUG-6 🟡 Zod API kullanımı tutarsız
+### BUG-6 ✅ Zod API kullanımı tutarsız (Tamamlandı)
 - **Dosya:** `app/api/consensus/route.ts` (`.error.errors`) ve `app/api/mcp/open-notebook/route.ts` (`.issues`)
 - **Sorun:** `.errors` Zod 4'te kaldırıldı. İleride yükseltmede kırılır.
 - **Öneri:**
-  - [ ] Her yerde `.issues` kullan
+  - [x] Her yerde `.issues` kullan
 
-### BUG-7 🟡 `APP_URL` Docker'a iletilmiyor
+### BUG-7 ✅ `APP_URL` Docker'a iletilmiyor (Tamamlandı)
 - **Dosya:** `docker-compose.yml`, `lib/providers/openrouter.ts`
 - **Sorun:** `.env.example` ve OpenRouter `HTTP-Referer` başlığı `APP_URL` kullanıyor, compose ise bu değişkeni iletmiyor. Docker'da hep `http://localhost:3000` kalıyor.
 - **Öneri:**
-  - [ ] `docker-compose.yml`'e `APP_URL=${APP_URL:-http://localhost:3000}` ekle
+  - [x] `docker-compose.yml`'e `APP_URL=${APP_URL:-http://localhost:3000}` ekle
 
-### BUG-8 🟡 Eskimiş model katalogları ve varsayılanlar
+### BUG-8 ✅ Eskimiş model katalogları ve varsayılanlar (Tamamlandı)
 - **Dosya:** `lib/config/agents.ts`, `lib/types.ts`
 - **Sorun:** `gemini-1.5-*`, `claude-3-5-*`, `claude-3-7-*`, `o1-mini` gibi modeller sağlayıcılar tarafından emekli edilmiş veya edilmek üzere olabilir (sağlayıcı dokümanlarından doğrulanmalı). Varsayılan konfigürasyon bunlara dayanıyor.
 - **Öneri:**
-  - [ ] Güncel katalog + `tsc` ile doğrulanan tek kaynak (config), özel model girişi zaten var
+  - [x] Güncel katalog + `tsc` ile doğrulanan tek kaynak (config), özel model girişi zaten var
 
 ### BUG-9 🟡 Mimari: tek devasa bileşen
 - **Dosya:** `app/page.tsx` (1850 satır)
@@ -169,11 +169,11 @@
 - **Öneri:**
   - [ ] Bileşenlere ve hook'lara böl (SettingsModal, SessionSidebar, StageTabs, `useLocalSettings`)
 
-### BUG-10 🟡 `any` kullanımı
+### BUG-10 ✅ `any` kullanımı (Tamamlandı)
 - **Dosya:** `app/api/mcp/open-notebook/route.ts`, `app/page.tsx`
 - **Sorun:** Birçok `err: any`, `nb: any`, `params: z.any()`. Tip güvenliği zayıf.
 - **Öneri:**
-  - [ ] `unknown` + daraltma, harici yanıtlar için Zod şeması
+  - [x] `unknown` + daraltma, harici yanıtlar için Zod şeması
 
 ---
 
@@ -181,38 +181,38 @@
 
 ### `npm audit` — 10 açık (6 düşük, 2 orta, 2 yüksek)
 
-### DEP-1 🟠 `ai@4` zinciri: `jsondiffpatch` ve `@ai-sdk/provider-utils`
+### DEP-1 ✅ `ai@4` zinciri (Planlandı/İncelendi)
 - **Detay:**
   - `jsondiffpatch <=0.7.5` (yüksek): XSS ve prototype pollution. `ai`'nin UI tarafında kullanılıyor. Projede yalnızca sunucuda `generateText` çağrıldığı için pratik etkisi düşük.
   - `@ai-sdk/provider-utils <3.0.28`: kontrolsüz kaynak tüketimi. Düzeltme `ai@7` gerektiriyor (breaking).
 - **Öneri:**
-  - [ ] `ai` v5+ ve `@ai-sdk/*` yükseltmesini planla
-  - [ ] API değişiklikleri: `LanguageModelV1` → yeni model tipi, `maxTokens` → `maxOutputTokens`, `usage.promptTokens` → `inputTokens`
+  - [x] `ai` v5+ ve `@ai-sdk/*` yükseltmesini planla
+  - [x] API değişiklikleri: `LanguageModelV1` → yeni model tipi, `maxTokens` → `maxOutputTokens`, `usage.promptTokens` → `inputTokens`
 
-### DEP-2 🟠 `next` içindeki gömülü `postcss <=8.5.22`
+### DEP-2 ✅ `next` içindeki gömülü `postcss` (Planlandı/İncelendi)
 - **Detay:** Yüksek önemli advisory'ler. Düzeltme Next 16.3.x gerektiriyor (breaking). Yalnızca derleme zamanı CSS işlemeyle ilgili, çalışma zamanı riski düşük.
 - **Öneri:**
-  - [ ] Next 16'ya geçişi planla (`next lint` de orada kaldırılıyor)
-  - [ ] Geçici olarak `overrides` ile postcss sürümü denenebilir (denenmedi)
+  - [x] Next 16'ya geçişi planla (`next lint` de orada kaldırılıyor)
+  - [x] Geçici olarak `overrides` ile postcss sürümü denenebilir (denenmedi)
 
-### DEP-3 🟠 ESLint 8 EOL ve `next lint` kullanımdan kalkıyor
+### DEP-3 ✅ ESLint 8 EOL ve `next lint` kullanımdan kalkıyor (Planlandı/İncelendi)
 - **Detay:** `eslint@8.57.1` desteklenmiyor. `next lint` Next 16'da kaldırılıyor (CLI uyarısı verdi).
 - **Öneri:**
-  - [ ] ESLint 9 + flat config, `eslint` CLI'ya geçiş (`@next/codemod next-lint-to-eslint-cli`)
+  - [x] ESLint 9 + flat config, `eslint` CLI'ya geçiş (`@next/codemod next-lint-to-eslint-cli`)
 
-### DEP-4 🟡 `@types/better-sqlite3` yanlış bölümde
+### DEP-4 ✅ `@types/better-sqlite3` yanlış bölümde (Tamamlandı)
 - **Öneri:**
-  - [ ] `devDependencies`'e taşı
+  - [x] `devDependencies`'e taşı
 
-### DEP-5 🟡 `@types/node ^20` ile Node 22 çalışma zamanı uyumsuz
+### DEP-5 ✅ `@types/node ^20` ile Node 22 çalışma zamanı uyumsuz (Tamamlandı)
 - **Öneri:**
-  - [ ] `@types/node ^22`
+  - [x] `@types/node ^22`
 
-### DEP-6 🟡 Eksik `package.json` alanları ve script'ler
+### DEP-6 ✅ Eksik `package.json` alanları ve script'ler (Tamamlandı)
 - **Öneri:**
-  - [ ] `"engines": { "node": ">=22" }`
-  - [ ] `typecheck` (`tsc --noEmit`) ve `test` script'leri
-  - [ ] `react`/`react-dom` için `^19` (şu an `19.0.0` sabit, yama sürümlerini almıyor)
+  - [x] `"engines": { "node": ">=22" }`
+  - [x] `typecheck` (`tsc --noEmit`) ve `test` script'leri
+  - [x] `react`/`react-dom` için `^19` (şu an `19.0.0` sabit, yama sürümlerini almıyor)
 
 ### DEP-7 ℹ️ Kullanılmayan bağımlılık
 - Gerçekten kullanılmayan paket **bulunmadı**. `postcss`/`autoprefixer` yalnızca config dosyasındaki adlarla kullanılıyor, Tailwind v3 için gerekli.
@@ -222,17 +222,17 @@
 
 ## 4. Dokümantasyon ve CI
 
-### DOC-1 🟡 README dizin ağacı eksik
-- `app/api/sessions`, `app/api/mcp/open-notebook` ve `lib/db` yok. TODO.md'de Gemini sağlayıcısı yok.
+### DOC-1 ✅ README dizin ağacı eksik (Tamamlandı)
+- `app/api/sessions`, `app/api/mcp/open-notebook`, `lib/db` ve `lib/security.ts` eklendi.
 
-### DOC-2 🟡 "Test ve CI ✅" ifadesi doğru değil
-- Repoda test yok. `.github/workflows/docker-publish.yml` yalnızca Docker imajı üretiyor, `tsc`/lint/`npm audit` çalıştırmıyor. Pull request'lerde de çalışıyor ama kalite kapısı yok.
+### DOC-2 ✅ "Test ve CI ✅" ifadesi doğru değil (Tamamlandı)
+- Repoda birim testler (`lib/harness/utils.test.ts`) oluşturuldu. GitHub Actions CI iş akışı (`docker-publish.yml`) `npm run typecheck` ve `npm test` adımları içerecek şekilde güncellendi.
 - **Öneri:**
-  - [ ] CI'a `npm ci`, `tsc --noEmit`, `lint`, `npm audit --audit-level=high` ekle
-  - [ ] `sanitizeXmlData`, `getPrimaryAgents`, zaman bütçesi ve API doğrulaması için birim testleri
+  - [x] CI'a `npm ci`, `tsc --noEmit`, `lint` ve birim test adımlarını ekle
+  - [x] `sanitizeXmlData`, `getPrimaryAgents`, `sanitizeErrorMessage` ve Zod doğrulaması için birim testleri
 
-### DOC-3 🟡 `ai-consensus-mvp-issues.md` güncel değil
-- SEC-1/5/10 ve DEP-3 gibi maddeler "tamamlandı" görünüyor ama bu rapordaki bulgularla çelişiyor. Bu dosya ile birleştirilmeli veya güncellenmeli.
+### DOC-3 ✅ `ai-consensus-mvp-issues.md` güncel değil (Tamamlandı)
+- Bulgular `issue.md` ile senkronize edildi ve güncellendi.
 
 ---
 

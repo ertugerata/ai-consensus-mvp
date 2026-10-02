@@ -130,7 +130,13 @@ export function saveSession(session: {
   config: ConfigState;
   enableCrossReview?: boolean;
   results: MultiStageResults;
+  allowOverwrite?: boolean;
 }): SessionFull {
+  const existing = getSessionById(session.id);
+  if (existing && !session.allowOverwrite) {
+    throw new Error(`Session ID '${session.id}' halihazırda mevcut. Üzerine yazmak için 'allowOverwrite' seçeneğini etkinleştirin.`);
+  }
+
   const db = getDb();
   const now = new Date().toISOString();
   const title = session.title || session.prompt.slice(0, 60).trim() || 'Yeni Oturum';

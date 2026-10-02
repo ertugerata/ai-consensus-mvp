@@ -30,14 +30,23 @@ Bu proje, **Next.js 15 (App Router)**, **Tailwind CSS**, **TypeScript** ve **Ver
 ai-consensus-mvp/
 ├── app/
 │   ├── api/
-│   │   └── consensus/
-│   │       └── route.ts         # Zod doğrulama, Rate Limit ve Multi-Stage Harness API uç noktası
+│   │   ├── consensus/
+│   │   │   └── route.ts         # Zod doğrulama, Rate Limit ve Multi-Stage Harness API uç noktası
+│   │   ├── mcp/
+│   │   │   └── open-notebook/
+│   │   │       └── route.ts     # Open-Notebook entegrasyonu için SSRF korumalı MCP Proxy uç noktası
+│   │   └── sessions/
+│   │       ├── route.ts         # Oturumları SQLite üzerinde listeleme ve kaydetme
+│   │       └── [id]/
+│   │           └── route.ts     # Oturum detayını getirme ve silme uç noktaları
 │   ├── globals.css               # Global Tailwind CSS stilleri
 │   ├── layout.tsx                # Kök düzen (Layout)
 │   └── page.tsx                  # Execution Pipeline UI ve Ajan Ayarları Ön Yüzü
 ├── lib/
 │   ├── config/
 │   │   └── agents.ts             # Varsayılan ajan ayarları ve model katalogları
+│   ├── db/
+│   │   └── index.ts              # SQLite (better-sqlite3) veritabanı işlemleri ve oturum yönetimi
 │   ├── harness/
 │   │   ├── engine.ts             # Çok aşamalı (Multi-Stage) tartışma harness motoru
 │   │   └── utils.ts              # XML sanitization ve hata temizleme yardımcıları
@@ -48,6 +57,7 @@ ai-consensus-mvp/
 │   │   ├── ollama.ts             # Yerel Ollama Provider entegrasyonu
 │   │   ├── openai.ts             # OpenAI Provider entegrasyonu
 │   │   └── openrouter.ts         # OpenRouter Provider entegrasyonu
+│   ├── security.ts               # SSRF engelleme, API Token doğrulaması ve Rate Limit yardımcısı
 │   └── types.ts                  # Zod Şemaları, Harness ve Ajan Tip Tanımlamaları
 ├── public/                       # Statik dosyalar
 ├── .dockerignore                 # Docker derleme dışı bırakılacak dosyalar
