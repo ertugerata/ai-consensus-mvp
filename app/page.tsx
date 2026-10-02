@@ -40,6 +40,7 @@ import {
 import {
   ApiKeys,
   ConfigState,
+  ConfigStateSchema,
   MultiStageResults,
   AgentExecutionResult,
   AgentConfig,
@@ -147,9 +148,11 @@ export default function Home() {
       const savedConfig = localStorage.getItem('ai_consensus_config');
       if (savedConfig) {
         const parsedConfig = JSON.parse(savedConfig);
-        if (parsedConfig.agents && Array.isArray(parsedConfig.agents) && parsedConfig.agents.length >= 2) {
-          setConfig(parsedConfig);
+        const parseResult = ConfigStateSchema.safeParse(parsedConfig);
+        if (parseResult.success) {
+          setConfig(parseResult.data);
         } else {
+          console.warn('Geçersiz konfigürasyon, varsayılan ayarlara dönülüyor:', parseResult.error);
           setConfig(DEFAULT_CONFIG);
         }
       }
@@ -352,8 +355,9 @@ export default function Home() {
       } else {
         setMcpTestStatus({ success: false, error: data.error || 'Bağlantı kurulamadı.' });
       }
-    } catch (err: any) {
-      setMcpTestStatus({ success: false, error: 'Ağ hatası: ' + err.message });
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setMcpTestStatus({ success: false, error: 'Ağ hatası: ' + errMsg });
     } finally {
       setMcpTesting(false);
     }
@@ -378,8 +382,8 @@ export default function Home() {
       } else {
         setMcpTestStatus({ success: false, error: data.error || 'Notebook listesi çekilemedi' });
       }
-    } catch (err: any) {
-      console.error(err);
+    } catch (err: unknown) {
+      console.error('MCP Notebooks error:', err);
     } finally {
       setMcpLoadingNotebooks(false);
     }
@@ -416,8 +420,9 @@ export default function Home() {
       } else {
         setErrorMessage(data.error || 'Notebook içeriği alınamadı');
       }
-    } catch (err: any) {
-      setErrorMessage('İçerik çekme hatası: ' + err.message);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setErrorMessage('İçerik çekme hatası: ' + errMsg);
     } finally {
       setMcpFetchingContent(false);
     }

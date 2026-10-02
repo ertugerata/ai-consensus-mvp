@@ -2,47 +2,27 @@ import { NextResponse } from 'next/server';
 import { RequestBodySchema } from '@/lib/types';
 import { runMultiStageHarness } from '@/lib/harness/engine';
 import { saveSession } from '@/lib/db';
+import { checkRateLimit, verifyApiToken } from '@/lib/security';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-// Simple in-memory rate limiter per IP/client
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_REQUESTS_PER_WINDOW = 10;
-
-function checkRateLimit(clientIp: string): boolean {
-  const now = Date.now();
-  const record = rateLimitMap.get(clientIp);
-
-  // Clean up stale entries periodically if map grows too large
-  if (rateLimitMap.size > 10000) {
-    rateLimitMap.clear();
-  }
-
-  if (!record || now > record.resetTime) {
-    rateLimitMap.set(clientIp, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
-    return false;
-  }
-
-  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
-    return true;
-  }
-
-  record.count += 1;
-  return false;
-}
-
 export async function POST(req: Request) {
-  try {
-    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'anonymous';
-    if (checkRateLimit(clientIp)) {
-      return NextResponse.json(
-        { error: 'Çok fazla istek gönderildi. Lütfen bir dakika bekledikten sonra tekrar deneyin.' },
-        { status: 429 }
-      );
-    }
+  if (checkRateLimit(req, 10)) {
+    return NextResponse.json(
+      { error: 'Çok fazla istek gönderildi. Lütfen bir dakika bekledikten sonra tekrar deneyin.' },
+      { status: 429 }
+    );
+  }
 
+  if (!verifyApiToken(req)) {
+    return NextResponse.json(
+      { error: 'Erişim yetkisiz. Geçerli API erişim token\'ı gereklidir.' },
+      { status: 401 }
+    );
+  }
+
+  try {
     const contentType = req.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
       return NextResponse.json(
@@ -60,7 +40,7 @@ export async function POST(req: Request) {
 
     const parseResult = RequestBodySchema.safeParse(jsonBody);
     if (!parseResult.success) {
-      const errorMessage = parseResult.error.errors.map((e) => e.message).join(', ');
+      const errorMessage = parseResult.error.issues.map((e) => e.message).join(', ');
       return NextResponse.json({ error: `Girdi doğrulama hatası: ${errorMessage}` }, { status: 400 });
     }
 
@@ -89,6 +69,7 @@ export async function POST(req: Request) {
     harnessResults.sessionId = activeSessionId;
 
     // Save session to SQLite database
+    let sessionSaved = false;
     try {
       saveSession({
         id: activeSessionId,
@@ -99,10 +80,14 @@ export async function POST(req: Request) {
         config,
         enableCrossReview,
         results: harnessResults,
+        allowOverwrite: true,
       });
+      sessionSaved = true;
     } catch (dbErr) {
       console.error('Session veritabanına kaydedilirken hata oluştu:', dbErr);
+      sessionSaved = false;
     }
+    harnessResults.sessionSaved = sessionSaved;
 
     // If stage 3 synthesis failed and stage 1 has no fulfilled results, return HTTP 502 error
     if (harnessResults.stage3Synthesis.status === 'rejected') {

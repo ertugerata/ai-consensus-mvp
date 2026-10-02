@@ -1,13 +1,19 @@
 /**
  * Sanitizes text content to prevent XML/HTML tag injection breaks in system/user prompts.
- * Escapes tag-like constructs so malicious inputs cannot fake prompt boundary tags.
+ * Strips zero-width characters, normalizes full-width angle brackets, and escapes all < and >.
  */
 export function sanitizeXmlData(content: string): string {
   if (!content) return '';
-  // Replace tag-like patterns matching any <...>-style text with escaped equivalents
-  return content.replace(/<\/?\s*[a-zA-Z_][a-zA-Z0-9_\-\s]*\/?>/gi, (match) => {
-    return match.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  });
+
+  return content
+    // Remove zero-width characters used to bypass filters
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    // Normalize unicode full-width angle brackets (＜ and ＞) to standard < and >
+    .replace(/＜/g, '<')
+    .replace(/＞/g, '>')
+    // Escape all angle brackets to prevent XML/HTML delimiter injections
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 /**
@@ -15,20 +21,35 @@ export function sanitizeXmlData(content: string): string {
  */
 export function sanitizeIdentifier(identifier: string, maxLength: number = 100): string {
   if (!identifier) return '';
-  const sanitized = identifier.replace(/[<>\r\n]/g, '').trim();
+  const sanitized = identifier
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/＜/g, '')
+    .replace(/＞/g, '')
+    .replace(/[<>\r\n]/g, '')
+    .trim();
   return sanitized.slice(0, maxLength);
 }
 
 /**
- * Formats error objects safely without leaking raw internal traces or sensitive API keys to end user.
+ * Formats error objects safely without leaking raw internal traces or sensitive API keys / internal hosts to end user.
  */
 export function sanitizeErrorMessage(reason: unknown): string {
+  let rawMsg = 'İşlem sırasında beklenmeyen bir hata oluştu';
   if (typeof reason === 'string') {
-    return reason.replace(/sk-[a-zA-Z0-9_-]+/g, '[MASKED_KEY]');
+    rawMsg = reason;
+  } else if (reason instanceof Error) {
+    rawMsg = reason.message || rawMsg;
   }
-  if (reason instanceof Error) {
-    const msg = reason.message || 'Bilinmeyen hata';
-    return msg.replace(/sk-[a-zA-Z0-9_-]+/g, '[MASKED_KEY]');
-  }
-  return 'İşlem sırasında beklenmeyen bir hata oluştu';
+
+  return rawMsg
+    // Mask OpenAI & OpenRouter API keys
+    .replace(/sk-[a-zA-Z0-9_-]+/g, '[MASKED_KEY]')
+    // Mask Anthropic API keys
+    .replace(/sk-ant-[a-zA-Z0-9_-]+/g, '[MASKED_KEY]')
+    // Mask Google Gemini API keys
+    .replace(/AIza[a-zA-Z0-9_-]+/g, '[MASKED_KEY]')
+    // Mask internal docker/localhost addresses with ports
+    .replace(/host\.docker\.internal(:\d+)?/gi, '[INTERNAL_HOST]')
+    .replace(/127\.0\.0\.1(:\d+)?/gi, '[INTERNAL_HOST]')
+    .replace(/localhost(:\d+)?/gi, '[INTERNAL_HOST]');
 }
