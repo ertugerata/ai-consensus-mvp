@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test lib/harness/*.test.ts"
+    "test": "node --experimental-strip-types --test lib/security.test.ts lib/harness/*.test.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.1.0",
@@ -19,6 +19,7 @@
     "@ai-sdk/openai": "^1.1.0",
     "ai": "^4.1.0",
     "better-sqlite3": "^13.0.3",
+    "ipaddr.js": "^2.5.0",
     "lucide-react": "^0.470.0",
     "next": "^15.5.26",
     "react": "^19.0.0",

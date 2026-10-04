@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { checkRateLimit, isBlockedUrl, verifyApiToken } from '@/lib/security';
+import { sanitizeErrorMessage } from '@/lib/harness/utils';
 
 const ALLOWED_MCP_METHODS = [
   'ping',
@@ -49,9 +50,9 @@ export async function POST(req: NextRequest) {
 
     const { baseUrl, apiKey, action, notebookId, method, params } = parsed.data;
 
-    if (isBlockedUrl(baseUrl)) {
+    if (await isBlockedUrl(baseUrl)) {
       return NextResponse.json(
-        { error: 'Güvenlik nedeniyle belirtilen hedef adrese erişim engellendi (SSRF koruması).' },
+        { error: 'Güvenlik nedeniyle belirtilen hedef adrese erişim engellendi (SSRF koruması). Özel ağ adresi kullanıyorsanız sunucu yöneticisinin OPEN_NOTEBOOK_ALLOW_LIST veya ALLOW_PRIVATE_IPS ortam değişkenini yapılandırması gereklidir.' },
         { status: 400 }
       );
     }
@@ -83,6 +84,13 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ success: true, message: 'Open-Notebook sunucusuna başarıyla bağlanıldı.' });
         }
 
+        if (testRes.status === 401 || testRes.status === 403) {
+          return NextResponse.json(
+            { success: false, error: `Kimlik doğrulama başarısız (HTTP ${testRes.status}). Lütfen API Key değerini kontrol edin.` },
+            { status: testRes.status }
+          );
+        }
+
         // Try MCP endpoint or root
         const mcpTest = await fetch(`${cleanBaseUrl}/mcp`, {
           method: 'POST',
@@ -92,16 +100,23 @@ export async function POST(req: NextRequest) {
           signal: AbortSignal.timeout(6000),
         });
 
-        if (mcpTest.ok || mcpTest.status < 500) {
+        if (mcpTest.ok) {
           return NextResponse.json({ success: true, message: 'Open-Notebook MCP endpoint bağlandı.' });
         }
 
+        if (mcpTest.status === 401 || mcpTest.status === 403) {
+          return NextResponse.json(
+            { success: false, error: `Kimlik doğrulama başarısız (HTTP ${mcpTest.status}). Lütfen API Key değerini kontrol edin.` },
+            { status: mcpTest.status }
+          );
+        }
+
         return NextResponse.json(
-          { success: false, error: `Sunucu yanıt verdi ancak durum kodu: ${testRes.status}` },
+          { success: false, error: `Sunucu yanıt verdi ancak bağlantı doğrulanamadı (HTTP ${testRes.status} / MCP ${mcpTest.status}).` },
           { status: 400 }
         );
       } catch (err: unknown) {
-        const errMsg = err instanceof Error ? err.message : 'Bağlantı hatası';
+        const errMsg = sanitizeErrorMessage(err);
         return NextResponse.json(
           { success: false, error: `Open-Notebook adresine ulaşılamadı (${errMsg}). Adresi ve ağ erişimini kontrol edin.` },
           { status: 502 }
@@ -172,7 +187,7 @@ export async function POST(req: NextRequest) {
           { status: res.status }
         );
       } catch (err: unknown) {
-        const errMsg = err instanceof Error ? err.message : 'Bağlantı hatası';
+        const errMsg = sanitizeErrorMessage(err);
         return NextResponse.json(
           { error: `Open-Notebook sunucusuyla iletişim hatası: ${errMsg}` },
           { status: 500 }
@@ -226,7 +241,7 @@ export async function POST(req: NextRequest) {
               .join('\n\n');
           }
         } catch (e) {
-          console.warn('Sources endpoint warning:', e);
+          console.warn('Sources endpoint warning:', sanitizeErrorMessage(e));
         }
 
         // Fetch notes for notebook
@@ -247,7 +262,7 @@ export async function POST(req: NextRequest) {
               .join('\n\n');
           }
         } catch (e) {
-          console.warn('Notes endpoint warning:', e);
+          console.warn('Notes endpoint warning:', sanitizeErrorMessage(e));
         }
 
         combinedContent = `=========================================
@@ -291,7 +306,7 @@ ${notesText ? `### NOTLAR:\n${notesText}\n` : ''}`;
           content: trimmedContent || `[Notebook '${title}' içeriği boş veya alınamadı]`,
         });
       } catch (err: unknown) {
-        const errMsg = err instanceof Error ? err.message : 'Hata oluştu';
+        const errMsg = sanitizeErrorMessage(err);
         return NextResponse.json(
           { error: `Notebook içeriği çekilemedi: ${errMsg}` },
           { status: 500 }
@@ -326,7 +341,7 @@ ${notesText ? `### NOTLAR:\n${notesText}\n` : ''}`;
         const data = await mcpRes.json();
         return NextResponse.json(data);
       } catch (err: unknown) {
-        const errMsg = err instanceof Error ? err.message : 'MCP çağrısı başarısız';
+        const errMsg = sanitizeErrorMessage(err);
         return NextResponse.json({ error: `MCP çağrısı başarısız: ${errMsg}` }, { status: 500 });
       }
     }
@@ -334,7 +349,7 @@ ${notesText ? `### NOTLAR:\n${notesText}\n` : ''}`;
     return NextResponse.json({ error: 'Geçersiz eylem' }, { status: 400 });
   } catch (error: unknown) {
     console.error('MCP proxy error:', error);
-    const errMsg = error instanceof Error ? error.message : 'Sunucu içi MCP hatası';
+    const errMsg = sanitizeErrorMessage(error);
     return NextResponse.json(
       { error: errMsg },
       { status: 500 }
