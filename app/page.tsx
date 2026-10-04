@@ -60,6 +60,15 @@ interface SessionListItem {
   updated_at: string;
 }
 
+interface McpNotebookItem {
+  id: string;
+  name: string;
+  description?: string;
+  sourcesCount?: number;
+  notesCount?: number;
+  updatedAt?: string;
+}
+
 const DEFAULT_KEYS: ApiKeys = {
   openai: '',
   anthropic: '',
@@ -90,6 +99,8 @@ export default function Home() {
   const [showKeys, setShowKeys] = useState(false);
   const [copied, setCopied] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [sessionWarning, setSessionWarning] = useState<string | null>(null);
+  const [apiAccessToken, setApiAccessToken] = useState('');
   const [enableCrossReview, setEnableCrossReview] = useState(true);
   const [activeStageTab, setActiveStageTab] = useState<'stage1' | 'stage2' | 'stage3'>('stage3');
 
@@ -99,7 +110,7 @@ export default function Home() {
   const [mcpApiKey, setMcpApiKey] = useState('');
   const [mcpTesting, setMcpTesting] = useState(false);
   const [mcpTestStatus, setMcpTestStatus] = useState<{ success?: boolean; error?: string; message?: string } | null>(null);
-  const [mcpNotebooks, setMcpNotebooks] = useState<any[]>([]);
+  const [mcpNotebooks, setMcpNotebooks] = useState<McpNotebookItem[]>([]);
   const [mcpLoadingNotebooks, setMcpLoadingNotebooks] = useState(false);
   const [mcpSelectedNotebookId, setMcpSelectedNotebookId] = useState<string | null>(null);
   const [mcpFetchingContent, setMcpFetchingContent] = useState(false);
@@ -113,11 +124,22 @@ export default function Home() {
   const [config, setConfig] = useState<ConfigState>(DEFAULT_CONFIG);
   const [stageResults, setStageResults] = useState<MultiStageResults | null>(null);
 
+  const getAuthHeaders = (extraHeaders?: Record<string, string>): Record<string, string> => {
+    const headers: Record<string, string> = { ...extraHeaders };
+    if (apiAccessToken) {
+      headers['Authorization'] = `Bearer ${apiAccessToken}`;
+      headers['x-api-token'] = apiAccessToken;
+    }
+    return headers;
+  };
+
   // Fetch session history from SQLite API
   const fetchSessionsList = async () => {
     setLoadingSessions(true);
     try {
-      const res = await fetch('/api/sessions');
+      const res = await fetch('/api/sessions', {
+        headers: getAuthHeaders(),
+      });
       if (res.ok) {
         const data = await res.json();
         setSessions(data.sessions || []);
@@ -173,9 +195,13 @@ export default function Home() {
 
       const savedNbKey = localStorage.getItem('ai_consensus_open_notebook_api_key');
       if (savedNbKey) setOpenNotebookApiKey(savedNbKey);
+
+      const savedAccessToken = localStorage.getItem('ai_consensus_api_access_token');
+      if (savedAccessToken) setApiAccessToken(savedAccessToken);
     } catch (err) {
       console.error('localStorage okuma hatası:', err);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sync settings modal with browser back button / popstate and Escape key
@@ -238,6 +264,7 @@ export default function Home() {
     safeSaveStorage('ai_consensus_cross_review', String(enableCrossReview));
     safeSaveStorage('ai_consensus_open_notebook_url', openNotebookUrl);
     safeSaveStorage('ai_consensus_open_notebook_api_key', openNotebookApiKey);
+    safeSaveStorage('ai_consensus_api_access_token', apiAccessToken);
     closeSettings();
   };
 
@@ -253,7 +280,9 @@ export default function Home() {
   const handleSelectSession = async (id: string) => {
     try {
       setErrorMessage(null);
-      const res = await fetch(`/api/sessions/${id}`);
+      const res = await fetch(`/api/sessions/${id}`, {
+        headers: getAuthHeaders(),
+      });
       if (!res.ok) {
         setErrorMessage('Oturum verisi alınamadı.');
         return;
@@ -280,7 +309,10 @@ export default function Home() {
   const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     try {
-      const res = await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/sessions/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
       if (res.ok) {
         if (sessionId === id) {
           handleNewSession();
@@ -341,7 +373,7 @@ export default function Home() {
     try {
       const res = await fetch('/api/mcp/open-notebook', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'test',
           baseUrl: mcpBaseUrl,
@@ -369,7 +401,7 @@ export default function Home() {
     try {
       const res = await fetch('/api/mcp/open-notebook', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'list_notebooks',
           baseUrl: url,
@@ -396,7 +428,7 @@ export default function Home() {
     try {
       const res = await fetch('/api/mcp/open-notebook', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'get_notebook',
           baseUrl: mcpBaseUrl,
@@ -466,7 +498,7 @@ export default function Home() {
     let loadedCount = 0;
 
     files.forEach((file) => {
-      const path = (file as any).webkitRelativePath || file.name;
+      const path = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
       // Skip hidden files or node_modules
       if (path.includes('/.') || path.includes('node_modules/') || path.includes('.git/')) {
         loadedCount++;
@@ -593,6 +625,7 @@ ${formatAgentResult(s3)}
   const handleSearch = async () => {
     if (!prompt.trim()) return;
     setErrorMessage(null);
+    setSessionWarning(null);
     setLoading(true);
 
     const activeId = sessionId || crypto.randomUUID();
@@ -603,7 +636,7 @@ ${formatAgentResult(s3)}
     try {
       const res = await fetch('/api/consensus', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           sessionId: activeId,
           title: prompt.slice(0, 60).trim(),
@@ -628,6 +661,11 @@ ${formatAgentResult(s3)}
 
       setStageResults(data);
       setActiveStageTab('stage3');
+
+      if (data.sessionSaved === false) {
+        setSessionWarning('Oturum veritabanına kaydedilemedi (dizin okuma/yazma izni kontrol edilmeli).');
+      }
+
       await fetchSessionsList();
     } catch (err) {
       console.error(err);
@@ -904,6 +942,22 @@ ${formatAgentResult(s3)}
             </div>
           )}
 
+          {/* SESSION WARNING NOTIFICATION BANNER */}
+          {sessionWarning && (
+            <div className="p-4 rounded-xl border border-amber-500/50 bg-amber-500/10 text-amber-400 flex items-center justify-between gap-3 text-sm">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={18} className="shrink-0" />
+                <span>{sessionWarning}</span>
+              </div>
+              <button
+                onClick={() => setSessionWarning(null)}
+                className="text-xs hover:underline font-semibold text-amber-300"
+              >
+                Kapat
+              </button>
+            </div>
+          )}
+
           {/* MAIN PROMPT INPUT CARD */}
           <div
             className={`border rounded-2xl p-5 flex flex-col justify-between gap-4 transition-colors ${
@@ -954,7 +1008,7 @@ ${formatAgentResult(s3)}
                     type="file"
                     ref={folderInputRef}
                     onChange={handleLocalFolderUpload}
-                    {...({ webkitdirectory: '', directory: '' } as any)}
+                    {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
                     multiple
                     className="hidden"
                   />
@@ -1356,12 +1410,12 @@ ${formatAgentResult(s3)}
 
             {/* Scrollable Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Provider API Keys */}
+              {/* Provider API Keys & API Token */}
               <div>
                 <h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                  1. Provider API Key Ayarları
+                  1. Provider API Key ve Sistem Doğrulama Ayarları
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-3">
                   {[
                     { key: 'openrouter' as const, label: 'OpenRouter API Key', placeholder: 'sk-or-v1-...' },
                     { key: 'openai' as const, label: 'OpenAI API Key', placeholder: 'sk-...' },
@@ -1398,15 +1452,44 @@ ${formatAgentResult(s3)}
                       </div>
                     </div>
                   ))}
+
+                  {/* System API Access Token Field */}
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="api-access-token-modal" className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                      API Erişim Token&apos;ı (Sistem Doğrulama)
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="api-access-token-modal"
+                        type={showKeys ? 'text' : 'password'}
+                        value={apiAccessToken}
+                        onChange={(e) => setApiAccessToken(e.target.value)}
+                        placeholder="API_ACCESS_TOKEN (varsa)..."
+                        className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          isDark
+                            ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-600'
+                            : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                        }`}
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                <div className={`p-3 rounded-xl border text-xs space-y-2 ${
                   isDark ? 'bg-slate-950/80 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
                 }`}>
-                  <Server size={16} className="text-blue-400 shrink-0" />
-                  <span>
-                    <strong>Ollama Yapılandırması:</strong> SSRF koruması gereği yerel Ollama adresi sunucu tarafında <code>OLLAMA_BASE_URL</code> ortam değişkeni ile belirlenir.
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <AlertCircle size={16} className="text-amber-400 shrink-0" />
+                    <span>
+                      <strong>Güvenlik Uyarısı:</strong> Tarayıcı ön yüzünden girilen API anahtarları yerel hafızada (localStorage) saklanır. Üretim ortamında anahtarlarınızı sunucu tarafında <code>.env</code> dosyasında tanımlamanız önerilir.
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1 border-t border-slate-800/50">
+                    <Server size={16} className="text-blue-400 shrink-0" />
+                    <span>
+                      <strong>Ollama Yapılandırması:</strong> Yerel Ollama adresi sunucu tarafında <code>OLLAMA_BASE_URL</code> ortam değişkeni ile belirlenir.
+                    </span>
+                  </div>
                 </div>
               </div>
 

@@ -17,10 +17,29 @@ Bu proje, **Next.js 15 (App Router)**, **Tailwind CSS**, **TypeScript** ve **Ver
 - **Dinamik Ajan Yapılandırması:**
   - Her ajan için bağımsız Sistem İstemi (System Prompt), Sıcaklık (Temperature), Sağlayıcı ve Model seçimi.
 - **Harici Hafıza (Memory) ve Kriter Desteği:**
-  - Ajanlara bağlam veya doküman aktarımı (`.txt`, `.md`, `.json`, `.csv` yükleme ve indirme desteği) ve özel çalışma kuralları tanımlama.
+  - Ajanlara bağlam veya doküman aktarımı (`.txt`, `.md`, `.json`, `.csv`, `.py`, `.ts` yükleme ve indirme desteği), Open-Notebook MCP entegrasyonu ve özel çalışma kuralları tanımlama.
 - **Güvenlik Sertleştirmeleri:**
-  - Zod tek kaynaklı tip ve girdi doğrulaması (`lib/types.ts`), SSRF korumaları, API rate limit (10 istek/dk), `maxTokens` ve deadline zaman bütçesi yönetimi.
-  - Tümüyle kaçışlanmış XML verileri ve Sistem İstemi düzeyinde prompt injection koruması (`SYSTEM_SECURITY_DIRECTIVE`).
+  - **SSRF Koruması (isBlockedUrl):** `dns.promises.lookup` ile DNS çözümlemesi, IPv6, loopback, link-local, ULA, CGNAT, private IP aralıkları (`ipaddr.js`) ve bulut metadata adreslerinin (`169.254.169.254`, `metadata.google.internal`) tespiti ve engellenmesi.
+  - **API Token Doğrulaması (API_ACCESS_TOKEN):** Sabit zamanlı karşılaştırma (`crypto.timingSafeEqual`) ve hem `Authorization: Bearer` hem de `x-api-token` başlık desteği.
+  - **Zod Tip & Girdi Doğrulaması:** Tüm istekler `lib/types.ts` Zod şemaları ile doğrulanır.
+  - **API Rate Limit:** Yol ve IP/Token bazlı akıllı kota sınırlaması.
+  - **Prompt Injection Directives:** Kaçışlanmış XML verileri ve Sistem İstemi düzeyinde `SYSTEM_SECURITY_DIRECTIVE` koruması.
+
+---
+
+## 🔒 Ortam Değişkenleri (Environment Variables)
+
+| Değişken | Açıklama | Varsayılan |
+|---|---|---|
+| `API_ACCESS_TOKEN` | Tüm API uç noktaları için sistem genelinde zorunlu doğrulama token'ı. | *Boş (İsteğe bağlı)* |
+| `ALLOW_PRIVATE_IPS` | Özel ağ ve yerel IP adreslerine (192.168.x, 10.x, 172.16.x, 127.0.0.1) erişime izin verir (`true`/`false`). | `false` |
+| `OPEN_NOTEBOOK_ALLOW_LIST` | İzin verilen Open-Notebook host veya `host:port` adreslerinin virgülle ayrılmış listesi. | *Boş* |
+| `OLLAMA_BASE_URL` | Sunucu tarafındaki Ollama API adresi. | `http://localhost:11434` |
+| `APP_URL` | Uygulama kamu adresi. | `http://localhost:3000` |
+| `OPENROUTER_API_KEY` | Sunucu tarafı varsayılan OpenRouter API anahtarı. | *Boş* |
+| `OPENAI_API_KEY` | Sunucu tarafı varsayılan OpenAI API anahtarı. | *Boş* |
+| `ANTHROPIC_API_KEY` | Sunucu tarafı varsayılan Anthropic API anahtarı. | *Boş* |
+| `GEMINI_API_KEY` | Sunucu tarafı varsayılan Google Gemini API anahtarı. | *Boş* |
 
 ---
 
@@ -58,11 +77,12 @@ ai-consensus-mvp/
 │   │   ├── openai.ts             # OpenAI Provider entegrasyonu
 │   │   └── openrouter.ts         # OpenRouter Provider entegrasyonu
 │   ├── security.ts               # SSRF engelleme, API Token doğrulaması ve Rate Limit yardımcısı
+│   ├── security.test.ts          # Güvenlik modülleri birim testleri (17 test)
 │   └── types.ts                  # Zod Şemaları, Harness ve Ajan Tip Tanımlamaları
 ├── public/                       # Statik dosyalar
 ├── .dockerignore                 # Docker derleme dışı bırakılacak dosyalar
 ├── .env.example                  # Örnek ortam değişkenleri
-├── ai-consensus-mvp-issues.md   # İnceleme raporu
+├── ai-consensus-mvp-issues.md   # İnceleme ve issue raporu
 ├── docker-compose.yml            # Docker Compose konfigürasyonu
 ├── Dockerfile                    # Multi-stage Dockerfile (Node 22 Alpine)
 ├── LICENSE                       # MIT Lisans belgesi
@@ -103,7 +123,14 @@ Uygulama `http://localhost:3000` adresinde çalışacaktır.
    npm run dev
    ```
 
-3. **Üretim Derlemesi ve Tip Kontrolü:**
+3. **Tip Kontrolü, Lint ve Birim Testleri:**
+   ```bash
+   npm run typecheck
+   npm run lint
+   npm test
+   ```
+
+4. **Üretim Derlemesi:**
    ```bash
    npm run build
    ```

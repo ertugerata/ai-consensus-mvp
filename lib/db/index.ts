@@ -132,44 +132,49 @@ export function saveSession(session: {
   results: MultiStageResults;
   allowOverwrite?: boolean;
 }): SessionFull {
-  const existing = getSessionById(session.id);
-  if (existing && !session.allowOverwrite) {
-    throw new Error(`Session ID '${session.id}' halihazırda mevcut. Üzerine yazmak için 'allowOverwrite' seçeneğini etkinleştirin.`);
-  }
-
   const db = getDb();
-  const now = new Date().toISOString();
-  const title = session.title || session.prompt.slice(0, 60).trim() || 'Yeni Oturum';
 
-  const stmt = db.prepare(`
-    INSERT INTO sessions (
-      id, title, prompt, memory, evaluation_criteria, config, enable_cross_review, results, created_at, updated_at
-    ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-    )
-    ON CONFLICT(id) DO UPDATE SET
-      title = excluded.title,
-      prompt = excluded.prompt,
-      memory = excluded.memory,
-      evaluation_criteria = excluded.evaluation_criteria,
-      config = excluded.config,
-      enable_cross_review = excluded.enable_cross_review,
-      results = excluded.results,
-      updated_at = excluded.updated_at
-  `);
+  const saveTransaction = db.transaction(() => {
+    const existing = getSessionById(session.id);
+    if (existing && !session.allowOverwrite) {
+      throw new Error(`Session ID '${session.id}' halihazırda mevcut. Üzerine yazmak için 'allowOverwrite' seçeneğini etkinleştirin.`);
+    }
 
-  stmt.run(
-    session.id,
-    title,
-    session.prompt,
-    session.memory || '',
-    session.evaluationCriteria || '',
-    JSON.stringify(session.config),
-    session.enableCrossReview === false ? 0 : 1,
-    JSON.stringify(session.results),
-    now,
-    now
-  );
+    const now = new Date().toISOString();
+    const title = session.title || session.prompt.slice(0, 60).trim() || 'Yeni Oturum';
+
+    const stmt = db.prepare(`
+      INSERT INTO sessions (
+        id, title, prompt, memory, evaluation_criteria, config, enable_cross_review, results, created_at, updated_at
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        title = excluded.title,
+        prompt = excluded.prompt,
+        memory = excluded.memory,
+        evaluation_criteria = excluded.evaluation_criteria,
+        config = excluded.config,
+        enable_cross_review = excluded.enable_cross_review,
+        results = excluded.results,
+        updated_at = excluded.updated_at
+    `);
+
+    stmt.run(
+      session.id,
+      title,
+      session.prompt,
+      session.memory || '',
+      session.evaluationCriteria || '',
+      JSON.stringify(session.config),
+      session.enableCrossReview === false ? 0 : 1,
+      JSON.stringify(session.results),
+      now,
+      now
+    );
+  });
+
+  saveTransaction();
 
   return getSessionById(session.id)!;
 }

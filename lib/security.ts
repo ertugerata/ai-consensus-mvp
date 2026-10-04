@@ -1,14 +1,34 @@
-import { NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
+import crypto from 'crypto';
+import dns from 'dns';
+import ipaddr from 'ipaddr.js';
 
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const DEFAULT_MAX_REQUESTS = 20;
 
+if (process.env.NODE_ENV === 'production' && !process.env.API_ACCESS_TOKEN) {
+  console.warn('[GÜVENLİK UYARISI] Production ortamında API_ACCESS_TOKEN ayarlanmamış! Tüm API uç noktaları doğrulamadan erişilebilir durumda.');
+}
+
 export function checkRateLimit(req: NextRequest | Request, limit = DEFAULT_MAX_REQUESTS): boolean {
-  const forwardedFor = req.headers.get('x-forwarded-for');
-  const clientIp = forwardedFor ? forwardedFor.split(',')[0].trim() : 'anonymous';
+  const authHeader = req.headers.get('authorization') || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const headerToken = req.headers.get('x-api-token') || '';
+  const token = bearerToken || headerToken;
+
+  let clientIp = 'anonymous';
+  if (process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1') {
+    const forwardedFor = req.headers.get('x-forwarded-for');
+    if (forwardedFor) {
+      clientIp = forwardedFor.split(',')[0].trim();
+    }
+  } else {
+    clientIp = req.headers.get('x-real-ip') || 'anonymous';
+  }
+
   const urlPath = new URL(req.url).pathname;
-  const key = `${clientIp}:${urlPath}`;
+  const key = token ? `token:${token}:${urlPath}` : `ip:${clientIp}:${urlPath}`;
 
   const now = Date.now();
 
@@ -36,6 +56,15 @@ export function checkRateLimit(req: NextRequest | Request, limit = DEFAULT_MAX_R
   return false;
 }
 
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  } catch {
+    return false;
+  }
+}
+
 export function verifyApiToken(req: NextRequest | Request): boolean {
   const token = process.env.API_ACCESS_TOKEN;
   if (!token) {
@@ -47,24 +76,78 @@ export function verifyApiToken(req: NextRequest | Request): boolean {
   const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
   const headerToken = req.headers.get('x-api-token') || '';
 
-  return bearerToken === token || headerToken === token;
+  if (bearerToken && safeCompare(bearerToken, token)) return true;
+  if (headerToken && safeCompare(headerToken, token)) return true;
+
+  return false;
 }
 
-export function isBlockedUrl(urlString: string): boolean {
+const BLOCKED_METADATA_IPS = new Set([
+  '169.254.169.254',
+  '162.254.169.254', // Legacy typo check fix
+  '100.100.100.200', // Alibaba Cloud metadata
+  '168.63.129.16',  // Azure metadata
+  '100.64.0.1',      // CGNAT gateway / metadata
+]);
+
+const BLOCKED_METADATA_HOSTS = new Set([
+  'metadata.google.internal',
+]);
+
+const BLOCKED_IP_RANGES = new Set([
+  'loopback',
+  'private',
+  'linkLocal',
+  'uniqueLocal',
+  'carrierGradeNat',
+  'unspecified',
+  'broadcast',
+  'multicast',
+  'reserved',
+]);
+
+function isBlockedIpAddress(ipString: string, allowPrivate: boolean): boolean {
+  if (BLOCKED_METADATA_IPS.has(ipString)) {
+    return true;
+  }
+
+  if (!ipaddr.isValid(ipString)) {
+    return true; // Invalid IP addresses are blocked
+  }
+
+  try {
+    let addr = ipaddr.parse(ipString);
+    if (addr.kind() === 'ipv6' && (addr as ipaddr.IPv6).isIPv4MappedAddress()) {
+      addr = (addr as ipaddr.IPv6).toIPv4Address();
+    }
+
+    const range = addr.range();
+
+    if (!allowPrivate && BLOCKED_IP_RANGES.has(range)) {
+      return true;
+    }
+  } catch {
+    return true;
+  }
+
+  return false;
+}
+
+export async function isBlockedUrl(urlString: string): Promise<boolean> {
   try {
     const parsed = new URL(urlString);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return true;
     }
 
-    const hostname = parsed.hostname.toLowerCase();
+    // Normalize hostname: strip IPv6 brackets and trailing dot
+    let hostname = parsed.hostname.toLowerCase();
+    hostname = hostname.replace(/\.+$/, '');
+    if (hostname.startsWith('[') && hostname.endsWith(']')) {
+      hostname = hostname.slice(1, -1);
+    }
 
-    // Always block cloud metadata services
-    if (
-      hostname === '169.254.169.254' ||
-      hostname === 'metadata.google.internal' ||
-      hostname === '162.254.169.254'
-    ) {
+    if (BLOCKED_METADATA_HOSTS.has(hostname) || BLOCKED_METADATA_IPS.has(hostname)) {
       return true;
     }
 
@@ -73,31 +156,39 @@ export function isBlockedUrl(urlString: string): boolean {
       ? process.env.OPEN_NOTEBOOK_ALLOW_LIST.split(',').map((h) => h.trim().toLowerCase())
       : [];
 
-    if (allowList.includes(hostname)) {
+    // Check allow list by hostname or host:port
+    const hostWithPort = parsed.port ? `${hostname}:${parsed.port}` : hostname;
+    if (allowList.includes(hostname) || allowList.includes(hostWithPort)) {
       return false;
     }
 
+    // If hostname is directly an IP address
+    if (ipaddr.isValid(hostname)) {
+      return isBlockedIpAddress(hostname, allowPrivate);
+    }
+
+    // Block known internal hostname patterns if private IPs are disabled
     if (!allowPrivate) {
-      // 127.0.0.0/8 or localhost
-      if (hostname === 'localhost' || hostname === '0.0.0.0' || hostname === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+      if (hostname === 'localhost' || hostname.endsWith('.internal') || hostname.endsWith('.local')) {
         return true;
       }
-      // 10.0.0.0/8
-      if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+    }
+
+    // Resolve DNS to verify all IP addresses behind the hostname
+    try {
+      const addresses = await dns.promises.lookup(hostname, { all: true });
+      if (!addresses || addresses.length === 0) {
         return true;
       }
-      // 172.16.0.0/12
-      if (/^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
-        return true;
+
+      for (const addr of addresses) {
+        if (isBlockedIpAddress(addr.address, allowPrivate)) {
+          return true;
+        }
       }
-      // 192.168.0.0/16
-      if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
-        return true;
-      }
-      // 169.254.0.0/16
-      if (/^169\.254\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
-        return true;
-      }
+    } catch {
+      // DNS lookup failure -> block for safety
+      return true;
     }
 
     return false;
