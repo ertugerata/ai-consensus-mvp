@@ -42,12 +42,10 @@ export function sanitizeErrorMessage(reason: unknown): string {
   }
 
   return rawMsg
-    // Mask OpenAI & OpenRouter API keys
-    .replace(/sk-[a-zA-Z0-9_-]+/g, '[MASKED_KEY]')
-    // Mask Anthropic API keys
-    .replace(/sk-ant-[a-zA-Z0-9_-]+/g, '[MASKED_KEY]')
+    // Mask OpenAI, OpenRouter, Anthropic API keys
+    .replace(/\b(sk-proj-[a-zA-Z0-9_-]{10,}|sk-or-v1-[a-zA-Z0-9_-]{10,}|sk-ant-[a-zA-Z0-9_-]{10,}|sk-[a-zA-Z0-9_-]{10,})\b/g, '[MASKED_KEY]')
     // Mask Google Gemini API keys
-    .replace(/AIza[a-zA-Z0-9_-]+/g, '[MASKED_KEY]')
+    .replace(/\bAIza[a-zA-Z0-9_-]{8,}\b/g, '[MASKED_KEY]')
     // Mask internal docker/localhost addresses with ports
     .replace(/host\.docker\.internal(:\d+)?/gi, '[INTERNAL_HOST]')
     .replace(/127\.0\.0\.1(:\d+)?/gi, '[INTERNAL_HOST]')
