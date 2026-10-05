@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import { MultiStageResults, ConfigState } from '../types';
+import type { MultiStageResults, ConfigState } from '../types.ts';
 
 export interface SessionRecord {
   id: string;
@@ -42,83 +42,122 @@ let dbInstance: Database.Database | null = null;
 function getDb(): Database.Database {
   if (dbInstance) return dbInstance;
 
-  const dataDir = path.join(process.cwd(), 'data');
+  const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
   if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+    try {
+      fs.mkdirSync(dataDir, { recursive: true });
+    } catch (err) {
+      console.warn(`Veritabanı dizini oluşturulamadı (${dataDir}):`, err);
+    }
   }
 
   const dbPath = path.join(dataDir, 'consensus.db');
-  dbInstance = new Database(dbPath, { timeout: 10000 });
+  let db: Database.Database;
 
-  // Enable WAL mode for better concurrency performance
-  dbInstance.pragma('journal_mode = WAL');
-
-  // Initialize schema
-  dbInstance.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      prompt TEXT NOT NULL,
-      memory TEXT DEFAULT '',
-      evaluation_criteria TEXT DEFAULT '',
-      config TEXT NOT NULL,
-      enable_cross_review INTEGER DEFAULT 1,
-      results TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+  try {
+    db = new Database(dbPath, { timeout: 10000 });
+  } catch (err) {
+    dbInstance = null;
+    console.error(
+      `Veritabanı dosyası açılamadı (${dbPath}). 'data' dizininin okuma/yazma izinlerini kontrol edin (örn. chmod 777 data veya chown 1001:1001 data).`,
+      err
     );
-    CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at DESC);
-  `);
+    throw err;
+  }
 
-  return dbInstance;
+  try {
+    // Enable WAL mode for better concurrency performance, fallback gracefully if filesystem doesn't support WAL
+    try {
+      db.pragma('journal_mode = WAL');
+    } catch (walErr) {
+      console.warn('WAL journal modu ayarlanamadı, varsayılan moda devam ediliyor:', walErr);
+    }
+
+    // Initialize schema
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        memory TEXT DEFAULT '',
+        evaluation_criteria TEXT DEFAULT '',
+        config TEXT NOT NULL,
+        enable_cross_review INTEGER DEFAULT 1,
+        results TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at DESC);
+    `);
+
+    dbInstance = db;
+    return dbInstance;
+  } catch (err) {
+    try {
+      db.close();
+    } catch {}
+    dbInstance = null;
+    console.error('Veritabanı şeması ilklendirilirken hata oluştu:', err);
+    throw err;
+  }
 }
 
 export function getAllSessions(): SessionListItem[] {
-  const db = getDb();
-  const stmt = db.prepare(`
-    SELECT id, title, prompt, created_at, updated_at
-    FROM sessions
-    ORDER BY created_at DESC
-  `);
-  return stmt.all() as SessionListItem[];
+  try {
+    const db = getDb();
+    const stmt = db.prepare(`
+      SELECT id, title, prompt, created_at, updated_at
+      FROM sessions
+      ORDER BY created_at DESC
+    `);
+    return stmt.all() as SessionListItem[];
+  } catch (err) {
+    console.warn('Session listesi veritabanından alınamadı (okuma/yazma izni hatası olabilir):', err);
+    return [];
+  }
 }
 
 export function getSessionById(id: string): SessionFull | null {
-  const db = getDb();
-  const stmt = db.prepare(`
-    SELECT * FROM sessions WHERE id = ?
-  `);
-  const row = stmt.get(id) as SessionRecord | undefined;
-  if (!row) return null;
-
-  let parsedConfig: ConfigState;
   try {
-    parsedConfig = JSON.parse(row.config);
-  } catch {
-    parsedConfig = {} as ConfigState;
-  }
+    const db = getDb();
+    const stmt = db.prepare(`
+      SELECT * FROM sessions WHERE id = ?
+    `);
+    const row = stmt.get(id) as SessionRecord | undefined;
+    if (!row) return null;
 
-  let parsedResults: MultiStageResults | null = null;
-  try {
-    if (row.results) {
-      parsedResults = JSON.parse(row.results);
+    let parsedConfig: ConfigState;
+    try {
+      parsedConfig = JSON.parse(row.config);
+    } catch {
+      parsedConfig = {} as ConfigState;
     }
-  } catch {
-    parsedResults = null;
-  }
 
-  return {
-    id: row.id,
-    title: row.title,
-    prompt: row.prompt,
-    memory: row.memory || '',
-    evaluationCriteria: row.evaluation_criteria || '',
-    config: parsedConfig,
-    enableCrossReview: Boolean(row.enable_cross_review),
-    results: parsedResults,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
+    let parsedResults: MultiStageResults | null = null;
+    try {
+      if (row.results) {
+        parsedResults = JSON.parse(row.results);
+      }
+    } catch {
+      parsedResults = null;
+    }
+
+    return {
+      id: row.id,
+      title: row.title,
+      prompt: row.prompt,
+      memory: row.memory || '',
+      evaluationCriteria: row.evaluation_criteria || '',
+      config: parsedConfig,
+      enableCrossReview: Boolean(row.enable_cross_review),
+      results: parsedResults,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  } catch (err) {
+    console.warn(`Session ID '${id}' veritabanından getirilemedi:`, err);
+    return null;
+  }
 }
 
 export function saveSession(session: {
@@ -180,10 +219,15 @@ export function saveSession(session: {
 }
 
 export function deleteSessionById(id: string): boolean {
-  const db = getDb();
-  const stmt = db.prepare(`
-    DELETE FROM sessions WHERE id = ?
-  `);
-  const result = stmt.run(id);
-  return result.changes > 0;
+  try {
+    const db = getDb();
+    const stmt = db.prepare(`
+      DELETE FROM sessions WHERE id = ?
+    `);
+    const result = stmt.run(id);
+    return result.changes > 0;
+  } catch (err) {
+    console.warn(`Session ID '${id}' silinemedi (veritabanı hatası):`, err);
+    return false;
+  }
 }
