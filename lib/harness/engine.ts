@@ -28,6 +28,11 @@ async function executeAgentCall(
 
   const model = getAgentModelInstance(agentConfig.provider, agentConfig.model, apiKeys);
   if (!model) {
+    const providerUpper = agentConfig.provider.toUpperCase();
+    const specificErr = agentConfig.provider === 'ollama'
+      ? 'Ollama adresi (OLLAMA_BASE_URL) sunucu ortamında tanımlanmamış.'
+      : `Sağlayıcı veya API anahtarı yapılandırılmamış (${providerUpper}). Lütfen Ayarlar menüsünden geçerli bir API anahtarı girin.`;
+
     return {
       agentId: agentKey,
       agentName,
@@ -35,7 +40,7 @@ async function executeAgentCall(
       model: modelName,
       text: '',
       status: 'rejected',
-      error: `Sağlayıcı veya API anahtarı yapılandırılmamış (${agentConfig.provider.toUpperCase()}).`,
+      error: specificErr,
       latencyMs: Date.now() - startTime,
     };
   }
@@ -74,7 +79,12 @@ async function executeAgentCall(
     };
   } catch (err: unknown) {
     const latencyMs = Date.now() - startTime;
-    const errorMsg = sanitizeErrorMessage(err);
+    let errorMsg = sanitizeErrorMessage(err);
+
+    if (errorMsg.toLowerCase().includes('timeout') || errorMsg.toLowerCase().includes('aborted')) {
+      errorMsg = `Yanıt süresi zaman aşımına uğradı (${Math.round(timeoutMs / 1000)} sn). Model sunucusu yanıt vermedi veya aşırı yüklü.`;
+    }
+
     return {
       agentId: agentKey,
       agentName,
@@ -125,8 +135,8 @@ export async function runMultiStageHarness(
 
   const nonRefereeBudget = Math.max(20000, TOTAL_PIPELINE_BUDGET_MS - GUARANTEED_REFEREE_BUDGET_MS);
   const stage1Timeout = enableCrossReview
-    ? Math.min(20000, Math.floor(nonRefereeBudget * 0.55))
-    : Math.min(30000, nonRefereeBudget);
+    ? Math.min(28000, Math.floor(nonRefereeBudget * 0.70))
+    : Math.min(35000, nonRefereeBudget);
 
   const stage1Promises = primaryAgents.map(({ key, cfg }) =>
     executeAgentCall(key, cfg, stage1Prompt, apiKeys, stage1Timeout)

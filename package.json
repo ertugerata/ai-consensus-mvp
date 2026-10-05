@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test lib/security.test.ts lib/harness/*.test.ts"
+    "test": "node --experimental-strip-types --test lib/security.test.ts lib/db/*.test.ts lib/harness/*.test.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.1.0",
