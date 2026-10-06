@@ -7,18 +7,6 @@ const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const DEFAULT_MAX_REQUESTS = 20;
 
-if (process.env.NODE_ENV === 'production') {
-  const isAllowUnauthenticated = process.env.ALLOW_UNAUTHENTICATED === 'true' || process.env.ALLOW_UNAUTHENTICATED === '1';
-  if (!process.env.API_ACCESS_TOKEN && !isAllowUnauthenticated) {
-    throw new Error(
-      '[GÜVENLİK HATASI] Production ortamında API_ACCESS_TOKEN ayarlanmalıdır veya kimlik doğrulamasız mod için ALLOW_UNAUTHENTICATED=true açıkça verilmelidir.'
-    );
-  }
-  if (!process.env.API_ACCESS_TOKEN) {
-    console.warn('[GÜVENLİK UYARISI] ALLOW_UNAUTHENTICATED=true olarak ayarlandı. Sunucu kimlik doğrulaması olmadan çalışıyor!');
-  }
-}
-
 function safeCompare(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   try {
@@ -31,6 +19,15 @@ function safeCompare(a: string, b: string): boolean {
 export function verifyApiToken(req: NextRequest | Request): boolean {
   const token = process.env.API_ACCESS_TOKEN;
   if (!token) {
+    if (process.env.NODE_ENV === 'production') {
+      const isAllowUnauthenticated = process.env.ALLOW_UNAUTHENTICATED === 'true' || process.env.ALLOW_UNAUTHENTICATED === '1';
+      if (!isAllowUnauthenticated) {
+        console.error(
+          '[GÜVENLİK HATASI] Production ortamında API_ACCESS_TOKEN ayarlanmalıdır veya kimlik doğrulamasız mod için ALLOW_UNAUTHENTICATED=true açıkça verilmelidir.'
+        );
+        return false;
+      }
+    }
     return true;
   }
 
