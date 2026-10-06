@@ -16,6 +16,15 @@ function safeCompare(a: string, b: string): boolean {
   }
 }
 
+export function getTokenHash(req: NextRequest | Request): string {
+  const authHeader = req.headers.get('authorization') || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const headerToken = req.headers.get('x-api-token') || '';
+  const rawToken = bearerToken || headerToken || 'unauthenticated';
+
+  return crypto.createHash('sha256').update(rawToken).digest('hex');
+}
+
 export function verifyApiToken(req: NextRequest | Request): boolean {
   const token = process.env.API_ACCESS_TOKEN;
   if (!token) {
@@ -57,11 +66,13 @@ export function checkRateLimit(req: NextRequest | Request, limit = DEFAULT_MAX_R
 
   const urlPath = new URL(req.url).pathname;
 
-  // If a token is configured and the request supplied a valid token, key rate limit by verified token.
-  // Otherwise, key rate limit strictly by verified client IP (or unverified indicator) to prevent rate limit bypass via random token headers.
+  // Rate limiting priority:
+  // Key rate limit strictly by verified token hash or by trusted client IP.
+  // Never key on arbitrary unverified x-api-token header values to prevent pool pollution or limit bypass.
   let key: string;
   if (configuredToken && isValidToken) {
-    key = `verified_token:${urlPath}`;
+    const tokenHash = getTokenHash(req).slice(0, 16);
+    key = `verified_token:${tokenHash}:${urlPath}`;
   } else {
     key = `ip:${clientIp}:${urlPath}`;
   }
@@ -93,10 +104,11 @@ export function checkRateLimit(req: NextRequest | Request, limit = DEFAULT_MAX_R
 }
 
 const BLOCKED_METADATA_IPS = new Set([
-  '169.254.169.254',
-  '100.100.100.200', // Alibaba Cloud metadata
-  '168.63.129.16',  // Azure metadata
-  '100.64.0.1',      // CGNAT gateway / metadata
+  '169.254.169.254', // AWS / GCP / Azure metadata IP
+  '169.254.170.2',   // AWS ECS task metadata IP
+  '100.100.100.200', // Alibaba Cloud metadata IP
+  '168.63.129.16',  // Azure metadata IP
+  '100.64.0.1',      // CGNAT gateway / metadata IP
 ]);
 
 const BLOCKED_METADATA_HOSTS = new Set([
@@ -192,22 +204,32 @@ function isBlockedIpAddress(ipString: string, allowPrivate: boolean): boolean {
   return false;
 }
 
-export async function isBlockedUrl(urlString: string): Promise<boolean> {
+export interface PinnedTarget {
+  pinnedUrl: string;
+  hostHeader: string;
+}
+
+export async function resolveAndValidateTarget(
+  baseUrlString: string,
+  targetPath: string
+): Promise<{ success: true; pinnedUrl: string; hostHeader: string } | { success: false; error: string }> {
   try {
-    const parsed = new URL(urlString);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return true;
+    if (baseUrlString.includes('?') || baseUrlString.includes('#') || baseUrlString.includes('@')) {
+      return { success: false, error: 'BaseUrl sorgu (?), fragment (#) veya kullanıcı bilgisi (@) içeremez.' };
     }
 
-    // Normalize hostname: strip IPv6 brackets and trailing dot
-    let hostname = parsed.hostname.toLowerCase();
-    hostname = hostname.replace(/\.+$/, '');
+    const parsed = new URL(baseUrlString);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { success: false, error: 'Yalnızca HTTP ve HTTPS protokolleri desteklenmektedir.' };
+    }
+
+    if (parsed.pathname !== '/' && parsed.pathname !== '') {
+      return { success: false, error: 'BaseUrl yol (path) içeremez; yalnızca origin girilmelidir.' };
+    }
+
+    let hostname = parsed.hostname.toLowerCase().replace(/\.+$/, '');
     if (hostname.startsWith('[') && hostname.endsWith(']')) {
       hostname = hostname.slice(1, -1);
-    }
-
-    if (BLOCKED_METADATA_HOSTS.has(hostname) || BLOCKED_METADATA_IPS.has(hostname)) {
-      return true;
     }
 
     const allowPrivate = process.env.ALLOW_PRIVATE_IPS === 'true' || process.env.ALLOW_PRIVATE_IPS === '1';
@@ -215,46 +237,87 @@ export async function isBlockedUrl(urlString: string): Promise<boolean> {
       ? process.env.OPEN_NOTEBOOK_ALLOW_LIST.split(',').map((h) => h.trim().toLowerCase())
       : [];
 
-    // Check allow list by hostname or host:port
-    const hostWithPort = parsed.port ? `${hostname}:${parsed.port}` : hostname;
-    if (allowList.includes(hostname) || allowList.includes(hostWithPort)) {
-      if (ipaddr.isValid(hostname)) {
-        return isBlockedIpAddress(hostname, true);
-      }
-      return false;
+    const portStr = parsed.port ? `:${parsed.port}` : '';
+    const hostWithPort = `${hostname}${portStr}`;
+
+    if (BLOCKED_METADATA_HOSTS.has(hostname) || BLOCKED_METADATA_IPS.has(hostname)) {
+      return {
+        success: false,
+        error: 'Güvenlik nedeniyle belirtilen hedef adrese erişim engellendi (SSRF koruması).',
+      };
     }
 
-    // If hostname is directly an IP address
+    const isExplicitlyAllowed = allowList.includes(hostname) || allowList.includes(hostWithPort);
+
+    let resolvedIp: string;
+
     if (ipaddr.isValid(hostname)) {
-      return isBlockedIpAddress(hostname, allowPrivate);
-    }
-
-    // Block known internal hostname patterns if private IPs are disabled
-    if (!allowPrivate) {
-      if (hostname === 'localhost' || hostname.endsWith('.internal') || hostname.endsWith('.local')) {
-        return true;
+      if (!isExplicitlyAllowed && isBlockedIpAddress(hostname, allowPrivate)) {
+        return {
+          success: false,
+          error: 'Güvenlik nedeniyle belirtilen hedef IP adresine erişim engellendi (SSRF koruması).',
+        };
       }
-    }
-
-    // Resolve DNS to verify all IP addresses behind the hostname
-    try {
-      const addresses = await dns.promises.lookup(hostname, { all: true });
-      if (!addresses || addresses.length === 0) {
-        return true;
-      }
-
-      for (const addr of addresses) {
-        if (isBlockedIpAddress(addr.address, allowPrivate)) {
-          return true;
+      resolvedIp = hostname;
+    } else {
+      if (!allowPrivate && !isExplicitlyAllowed) {
+        if (hostname === 'localhost' || hostname.endsWith('.internal') || hostname.endsWith('.local')) {
+          return {
+            success: false,
+            error: 'Güvenlik nedeniyle iç ağ alan adlarına erişim engellendi (SSRF koruması).',
+          };
         }
       }
-    } catch {
-      // DNS lookup failure -> block for safety
-      return true;
+
+      try {
+        const addresses = await dns.promises.lookup(hostname, { all: true });
+        if (!addresses || addresses.length === 0) {
+          if (isExplicitlyAllowed) {
+            resolvedIp = hostname;
+          } else {
+            return { success: false, error: 'Hedef sunucu alan adı çözümlenemedi.' };
+          }
+        } else {
+          for (const addr of addresses) {
+            if (!isExplicitlyAllowed && isBlockedIpAddress(addr.address, allowPrivate)) {
+              return {
+                success: false,
+                error: 'Güvenlik nedeniyle belirtilen hedef adrese erişim engellendi (SSRF koruması).',
+              };
+            }
+          }
+          resolvedIp = addresses[0].address;
+        }
+      } catch (err) {
+        if (isExplicitlyAllowed) {
+          resolvedIp = hostname;
+        } else {
+          return { success: false, error: 'Hedef sunucu DNS çözümleme hatası.' };
+        }
+      }
     }
 
-    return false;
+    const formattedIp =
+      ipaddr.isValid(resolvedIp) && ipaddr.parse(resolvedIp).kind() === 'ipv6'
+        ? `[${resolvedIp}]`
+        : resolvedIp;
+
+    const cleanPath = targetPath.startsWith('/') ? targetPath : `/${targetPath}`;
+
+    // For HTTPS targets, keep original domain in URL for TLS SNI cert validation;
+    // all resolved IPs behind hostname have already been validated above.
+    // For HTTP targets, use pinned IP in URL to prevent DNS Rebinding.
+    const pinnedUrl = parsed.protocol === 'https:' && !ipaddr.isValid(hostname)
+      ? `${parsed.protocol}//${parsed.host}${cleanPath}`
+      : `${parsed.protocol}//${formattedIp}${portStr}${cleanPath}`;
+
+    return { success: true, pinnedUrl, hostHeader: hostWithPort };
   } catch {
-    return true;
+    return { success: false, error: 'Geçersiz hedef URL adresi.' };
   }
+}
+
+export async function isBlockedUrl(urlString: string): Promise<boolean> {
+  const result = await resolveAndValidateTarget(urlString, '/');
+  return !result.success;
 }

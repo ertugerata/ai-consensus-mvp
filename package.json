@@ -14,10 +14,10 @@
     "test": "node --experimental-strip-types --test lib/security.test.ts lib/db/*.test.ts lib/harness/*.test.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.1.0",
-    "@ai-sdk/google": "^1.1.0",
-    "@ai-sdk/openai": "^1.1.0",
-    "ai": "^4.1.0",
+    "@ai-sdk/anthropic": "^1.1.15",
+    "@ai-sdk/google": "^1.1.18",
+    "@ai-sdk/openai": "^1.1.16",
+    "ai": "^4.1.54",
     "better-sqlite3": "^13.0.3",
     "ipaddr.js": "^2.5.0",
     "lucide-react": "^0.470.0",
@@ -35,10 +35,24 @@
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.2.0",
     "postcss": "^8.5.3",
-    "tailwindcss": "^3.4.4",
+    "tailwindcss": "^3.4.17",
     "typescript": "^5.5.2"
   },
   "overrides": {
-    "source-map-js": "^1.2.1"
+    "source-map-js": "^1.2.1",
+    "postcss": "^8.5.3",
+    "postcss-selector-parser": "^7.1.6",
+    "@fastify/busboy": "^3.2.2",
+    "undici": "^6.21.1",
+    "braces": "3.0.3",
+    "micromatch": "4.0.8",
+    "chokidar": "3.6.0",
+    "jsondiffpatch": "^0.7.6",
+    "tailwindcss": {
+      "braces": "3.0.3"
+    },
+    "eslint-config-next": {
+      "braces": "3.0.3"
+    }
   }
 }

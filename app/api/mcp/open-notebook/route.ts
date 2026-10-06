@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { checkRateLimit, isBlockedUrl, verifyApiToken } from '@/lib/security';
+import { checkRateLimit, resolveAndValidateTarget, verifyApiToken } from '@/lib/security';
 import { sanitizeErrorMessage } from '@/lib/harness/utils';
 
 const ALLOWED_MCP_METHODS = [
@@ -14,6 +14,7 @@ const ALLOWED_MCP_METHODS = [
 ];
 
 const MAX_UPSTREAM_RESPONSE_SIZE = 10 * 1024 * 1024; // 10 MB limit for upstream responses
+const MAX_REQUEST_BODY_SIZE = 1 * 1024 * 1024; // 1 MB payload limit
 
 async function fetchWithLimit(url: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(url, init);
@@ -24,11 +25,36 @@ async function fetchWithLimit(url: string, init?: RequestInit): Promise<Response
   return res;
 }
 
+async function fetchPinned(baseUrl: string, path: string, init?: RequestInit): Promise<Response> {
+  const target = await resolveAndValidateTarget(baseUrl, path);
+  if (!target.success) {
+    throw new Error(target.error);
+  }
+
+  const baseHeaders = (init?.headers as Record<string, string>) || {};
+  const mergedHeaders: Record<string, string> = {
+    ...baseHeaders,
+    Host: target.hostHeader,
+  };
+
+  return fetchWithLimit(target.pinnedUrl, {
+    ...init,
+    headers: mergedHeaders,
+  });
+}
+
 const McpRequestSchema = z.object({
   baseUrl: z
     .string()
     .url('Geçerli bir Open-Notebook IP veya URL adresi girin (örn. http://192.168.1.50:5055)')
     .superRefine((urlStr, ctx) => {
+      if (urlStr.includes('?') || urlStr.includes('#') || urlStr.includes('@')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'BaseUrl sorgu (?), fragment (#) veya kullanıcı bilgisi (@) içeremez.',
+        });
+        return;
+      }
       try {
         const parsed = new URL(urlStr);
         if (parsed.pathname !== '/' && parsed.pathname !== '') {
@@ -67,13 +93,6 @@ const McpRequestSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  if (checkRateLimit(req, 15)) {
-    return NextResponse.json(
-      { error: 'Çok fazla istek gönderildi. Lütfen bir süre sonra tekrar deneyin.' },
-      { status: 429 }
-    );
-  }
-
   if (!verifyApiToken(req)) {
     return NextResponse.json(
       { error: 'Erişim yetkisiz. Geçerli API erişim token\'ı gereklidir.' },
@@ -81,8 +100,37 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (checkRateLimit(req, 15)) {
+    return NextResponse.json(
+      { error: 'Çok fazla istek gönderildi. Lütfen bir süre sonra tekrar deneyin.' },
+      { status: 429 }
+    );
+  }
+
   try {
-    const body = await req.json();
+    const contentLength = req.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > MAX_REQUEST_BODY_SIZE) {
+      return NextResponse.json(
+        { error: 'İstek gövdesi izin verilen 1 MB sınırını aşıyor.' },
+        { status: 413 }
+      );
+    }
+
+    const textBody = await req.text();
+    if (textBody.length > MAX_REQUEST_BODY_SIZE) {
+      return NextResponse.json(
+        { error: 'İstek gövdesi izin verilen 1 MB sınırını aşıyor.' },
+        { status: 413 }
+      );
+    }
+
+    let body: unknown;
+    try {
+      body = JSON.parse(textBody);
+    } catch {
+      return NextResponse.json({ error: 'Geçersiz JSON gövdesi.' }, { status: 400 });
+    }
+
     const parsed = McpRequestSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -94,15 +142,14 @@ export async function POST(req: NextRequest) {
 
     const { baseUrl, apiKey, action, notebookId, method, params } = parsed.data;
 
-    if (await isBlockedUrl(baseUrl)) {
+    // Validate target and resolve IP to lock against DNS Rebinding
+    const initialTarget = await resolveAndValidateTarget(baseUrl, '/');
+    if (!initialTarget.success) {
       return NextResponse.json(
-        { error: 'Güvenlik nedeniyle belirtilen hedef adrese erişim engellendi (SSRF koruması). Özel ağ adresi kullanıyorsanız sunucu yöneticisinin OPEN_NOTEBOOK_ALLOW_LIST veya ALLOW_PRIVATE_IPS ortam değişkenini yapılandırması gereklidir.' },
+        { error: initialTarget.error },
         { status: 400 }
       );
     }
-
-    // Clean up base URL
-    const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -117,7 +164,7 @@ export async function POST(req: NextRequest) {
     // 1. ACTION: TEST CONNECTION
     if (action === 'test') {
       try {
-        const testRes = await fetchWithLimit(`${cleanBaseUrl}/api/v1/notebooks`, {
+        const testRes = await fetchPinned(baseUrl, '/api/v1/notebooks', {
           method: 'GET',
           headers,
           redirect: 'error',
@@ -136,7 +183,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Try MCP endpoint or root
-        const mcpTest = await fetchWithLimit(`${cleanBaseUrl}/mcp`, {
+        const mcpTest = await fetchPinned(baseUrl, '/mcp', {
           method: 'POST',
           headers,
           redirect: 'error',
@@ -171,7 +218,7 @@ export async function POST(req: NextRequest) {
     // 2. ACTION: LIST NOTEBOOKS
     if (action === 'list_notebooks') {
       try {
-        const res = await fetchWithLimit(`${cleanBaseUrl}/api/v1/notebooks`, {
+        const res = await fetchPinned(baseUrl, '/api/v1/notebooks', {
           method: 'GET',
           headers,
           redirect: 'error',
@@ -203,7 +250,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Fallback: Try MCP list_resources
-        const mcpRes = await fetchWithLimit(`${cleanBaseUrl}/mcp`, {
+        const mcpRes = await fetchPinned(baseUrl, '/mcp', {
           method: 'POST',
           headers,
           redirect: 'error',
@@ -248,7 +295,7 @@ export async function POST(req: NextRequest) {
       const encodedNotebookId = encodeURIComponent(notebookId);
 
       try {
-        const nbRes = await fetchWithLimit(`${cleanBaseUrl}/api/v1/notebooks/${encodedNotebookId}`, {
+        const nbRes = await fetchPinned(baseUrl, `/api/v1/notebooks/${encodedNotebookId}`, {
           method: 'GET',
           headers,
           redirect: 'error',
@@ -269,7 +316,7 @@ export async function POST(req: NextRequest) {
 
         // Fetch sources for notebook
         try {
-          const sourcesRes = await fetchWithLimit(`${cleanBaseUrl}/api/v1/notebooks/${encodedNotebookId}/sources`, {
+          const sourcesRes = await fetchPinned(baseUrl, `/api/v1/notebooks/${encodedNotebookId}/sources`, {
             method: 'GET',
             headers,
             redirect: 'error',
@@ -290,7 +337,7 @@ export async function POST(req: NextRequest) {
 
         // Fetch notes for notebook
         try {
-          const notesRes = await fetchWithLimit(`${cleanBaseUrl}/api/v1/notebooks/${encodedNotebookId}/notes`, {
+          const notesRes = await fetchPinned(baseUrl, `/api/v1/notebooks/${encodedNotebookId}/notes`, {
             method: 'GET',
             headers,
             redirect: 'error',
@@ -319,7 +366,7 @@ ${notesText ? `### NOTLAR:\n${notesText}\n` : ''}`;
 
         // If both sources and notes were empty, try MCP read_resource
         if (!sourcesText && !notesText) {
-          const mcpRead = await fetchWithLimit(`${cleanBaseUrl}/mcp`, {
+          const mcpRead = await fetchPinned(baseUrl, '/mcp', {
             method: 'POST',
             headers,
             redirect: 'error',
@@ -369,7 +416,7 @@ ${notesText ? `### NOTLAR:\n${notesText}\n` : ''}`;
       }
 
       try {
-        const mcpRes = await fetchWithLimit(`${cleanBaseUrl}/mcp`, {
+        const mcpRes = await fetchPinned(baseUrl, '/mcp', {
           method: 'POST',
           headers,
           redirect: 'error',

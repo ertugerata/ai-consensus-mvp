@@ -3,8 +3,16 @@ import { z } from 'zod';
 export const ProviderSchema = z.enum(['openai', 'anthropic', 'gemini', 'openrouter', 'ollama']);
 export type ProviderType = z.infer<typeof ProviderSchema>;
 
+const RESERVED_AGENT_IDS = new Set(['__proto__', 'constructor', 'prototype', 'referee']);
+
 export const AgentConfigSchema = z.object({
-  id: z.string().regex(/^[a-z0-9_-]{1,40}$/i, "Ajan ID'si yalnızca harf, rakam, tire veya alt çizgi içermeli ve en fazla 40 karakter olmalıdır").optional(),
+  id: z
+    .string()
+    .regex(/^[a-z0-9_-]{1,40}$/i, "Ajan ID'si yalnızca harf, rakam, tire veya alt çizgi içermeli ve en fazla 40 karakter olmalıdır")
+    .refine((val) => !RESERVED_AGENT_IDS.has(val.toLowerCase()), {
+      message: 'Ajan ID rezerve edilmiş veya geçersiz bir kelimedir (__proto__, constructor, prototype, referee)',
+    })
+    .optional(),
   name: z.string().max(100).optional(),
   provider: ProviderSchema,
   model: z.string().min(1, 'Model adı boş olamaz').max(150),
@@ -36,6 +44,15 @@ export const ConfigStateSchema = z.object({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'En az 2 geçerli birincil ajan tanımlanmalıdır.',
+      path: ['agents'],
+    });
+    return;
+  }
+
+  if (primaryAgents.length > 10) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'En fazla 10 birincil ajan tanımlanabilir.',
       path: ['agents'],
     });
     return;

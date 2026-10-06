@@ -87,4 +87,51 @@ describe('Database Operations (lib/db)', () => {
     const afterDelete = getSessionById(sessionId);
     assert.equal(afterDelete, null);
   });
+
+  it('enforces token hash ownership on save, get, list and delete', () => {
+    const sessionId = `test-ownership-${Date.now()}`;
+    const tokenHashA = 'hash_user_a_1234567890';
+    const tokenHashB = 'hash_user_b_0987654321';
+
+    // Save with User A
+    saveSession({
+      id: sessionId,
+      tokenHash: tokenHashA,
+      title: 'User A Session',
+      prompt: 'User A prompt',
+      config: testConfig,
+      results: testResults,
+      allowOverwrite: true,
+    });
+
+    // User A lists sessions -> sees it
+    const listA = getAllSessions(1, 50, tokenHashA);
+    assert.ok(listA.sessions.some((s) => s.id === sessionId));
+
+    // User B attempts to overwrite User A's session -> throws 403 Forbidden
+    assert.throws(
+      () => {
+        saveSession({
+          id: sessionId,
+          tokenHash: tokenHashB,
+          title: 'Hacked Title',
+          prompt: 'User B prompt',
+          config: testConfig,
+          results: testResults,
+          allowOverwrite: true,
+        });
+      },
+      (err: Error) => err.message.includes('403')
+    );
+
+    // User B attempts to delete User A's session -> throws 403 Forbidden
+    assert.throws(
+      () => deleteSessionById(sessionId, tokenHashB),
+      (err: Error) => err.message.includes('403')
+    );
+
+    // User A deletes session -> succeeds
+    const deleted = deleteSessionById(sessionId, tokenHashA);
+    assert.equal(deleted, true);
+  });
 });

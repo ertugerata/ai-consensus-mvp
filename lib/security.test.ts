@@ -1,6 +1,6 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { isBlockedUrl, verifyApiToken, checkRateLimit } from './security.ts';
+import { isBlockedUrl, verifyApiToken, checkRateLimit, getTokenHash } from './security.ts';
 import { sanitizeErrorMessage } from './harness/utils.ts';
 
 describe('Security Utilities', () => {
@@ -89,8 +89,22 @@ describe('Security Utilities', () => {
     });
   });
 
+  describe('getTokenHash', () => {
+    test('returns consistent sha256 hash for Bearer or x-api-token', () => {
+      const req1 = new Request('http://localhost/api/test', {
+        headers: { authorization: 'Bearer secret-123' },
+      });
+      const req2 = new Request('http://localhost/api/test', {
+        headers: { 'x-api-token': 'secret-123' },
+      });
+      assert.equal(getTokenHash(req1), getTokenHash(req2));
+      assert.equal(getTokenHash(req1).length, 64);
+    });
+  });
+
   describe('checkRateLimit', () => {
     test('enforces rate limits per key', () => {
+      process.env.TRUST_PROXY = 'true';
       const req = new Request('http://localhost/api/test-limit', {
         headers: { 'x-real-ip': '203.0.113.195' },
       });
