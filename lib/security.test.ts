@@ -1,6 +1,6 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { isBlockedUrl, verifyApiToken, checkRateLimit, getTokenHash } from './security.ts';
+import { isBlockedUrl, verifyApiToken, validateApiToken, checkRateLimit, getTokenHash, validateAndPinTargetUrl } from './security.ts';
 import { sanitizeErrorMessage } from './harness/utils.ts';
 
 describe('Security Utilities', () => {
@@ -116,6 +116,48 @@ describe('Security Utilities', () => {
 
       // Block 6th request
       assert.equal(checkRateLimit(req, 5), true);
+    });
+  });
+
+  describe('validateAndPinTargetUrl', () => {
+    test('pins IP for domain and rejects URL with path/query', async () => {
+      // Rejects paths in origin baseUrl
+      await assert.rejects(
+        async () => validateAndPinTargetUrl('http://example.com/admin'),
+        { message: 'baseUrl yalnızca origin içermelidir (path, query veya fragment barındıramaz).' }
+      );
+
+      // Rejects private IP addresses when allowPrivate is false
+      await assert.rejects(
+        async () => validateAndPinTargetUrl('http://127.0.0.1:8080'),
+        /Erişim engellendi: IP adresi .* güvenli değil/
+      );
+
+      // Allows private IP when allowPrivate is true
+      const result = await validateAndPinTargetUrl('http://127.0.0.1:8080', true);
+      assert.equal(result.pinnedUrl, 'http://127.0.0.1:8080');
+      assert.equal(result.originalHost, '127.0.0.1:8080');
+    });
+  });
+
+  describe('validateApiToken', () => {
+    test('returns valid: true when token matches', () => {
+      process.env.API_ACCESS_TOKEN = 'my-token';
+      const req = new Request('http://localhost/api/test', {
+        headers: { authorization: 'Bearer my-token' },
+      });
+      const res = validateApiToken(req);
+      assert.equal(res.valid, true);
+    });
+
+    test('returns valid: false when token is missing or wrong', () => {
+      process.env.API_ACCESS_TOKEN = 'my-token';
+      const req = new Request('http://localhost/api/test', {
+        headers: { authorization: 'Bearer wrong-token' },
+      });
+      const res = validateApiToken(req);
+      assert.equal(res.valid, false);
+      assert.equal(res.status, 401);
     });
   });
 

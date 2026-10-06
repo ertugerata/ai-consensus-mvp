@@ -1,5 +1,96 @@
 import net from 'net';
 import dns from 'dns/promises';
+import crypto from 'crypto';
+
+/**
+ * Extract token from Authorization header or x-api-token header
+ */
+export function extractToken(req: Request): string | null {
+  const authHeader = req.headers.get('authorization');
+  if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+    return authHeader.substring(7).trim();
+  }
+  const customHeader = req.headers.get('x-api-token');
+  if (customHeader) {
+    return customHeader.trim();
+  }
+  return null;
+}
+
+/**
+ * Verify API access token against process.env.API_ACCESS_TOKEN
+ */
+export function verifyApiToken(req: Request): boolean {
+  const expectedToken = process.env.API_ACCESS_TOKEN;
+  if (!expectedToken) {
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_UNAUTHENTICATED !== 'true') {
+      return false;
+    }
+    return true;
+  }
+  const token = extractToken(req);
+  return token === expectedToken;
+}
+
+/**
+ * Validate API token and return result object
+ */
+export function validateApiToken(req: Request): { valid: boolean; status?: number; error?: string } {
+  const expectedToken = process.env.API_ACCESS_TOKEN;
+  if (!expectedToken) {
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_UNAUTHENTICATED !== 'true') {
+      return { valid: false, status: 401, error: 'Unauthorized: Production requires API_ACCESS_TOKEN' };
+    }
+    return { valid: true };
+  }
+  const token = extractToken(req);
+  if (!token || token !== expectedToken) {
+    return { valid: false, status: 401, error: 'Unauthorized: Invalid or missing token' };
+  }
+  return { valid: true };
+}
+
+/**
+ * Get SHA-256 hash of token for session scoping
+ */
+export function getTokenHash(req: Request): string {
+  const token = extractToken(req);
+  if (!token) return 'anonymous';
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * Simple in-memory rate limiter per IP / URL
+ */
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function getClientIp(req: Request): string {
+  if (process.env.TRUST_PROXY === 'true') {
+    const realIp = req.headers.get('x-real-ip');
+    if (realIp) return realIp.trim();
+    const forwardedFor = req.headers.get('x-forwarded-for');
+    if (forwardedFor) return forwardedFor.split(',')[0].trim();
+  }
+  return '127.0.0.1';
+}
+
+export function checkRateLimit(req: Request, limit = 60, windowMs = 60000): boolean {
+  const clientIp = getClientIp(req);
+  const key = `${clientIp}:${req.url}`;
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
+    return false;
+  }
+
+  entry.count += 1;
+  if (entry.count > limit) {
+    return true;
+  }
+  return false;
+}
 
 /**
  * Gömülü IPv4 adreslerini (IPv4-mapped, NAT64, 6to4 vb.) çıkarır
@@ -62,6 +153,10 @@ export function isPrivateOrReservedIP(ip: string): boolean {
     if (parts[0] === 169 && parts[1] === 254) return true;
     // CGNAT (100.64.0.0/10)
     if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;
+    // Multicast (224.0.0.0/4)
+    if (parts[0] >= 224 && parts[0] <= 239) return true;
+    // Reserved (240.0.0.0/4)
+    if (parts[0] >= 240) return true;
     // Broadcast / 0.0.0.0
     if (parts[0] === 0 || parts[0] === 255) return true;
 
@@ -84,6 +179,62 @@ export function isPrivateOrReservedIP(ip: string): boolean {
   }
 
   return true; // Geçersiz IP'leri varsayılan olarak engelle
+}
+
+/**
+ * SSRF Kontrolü: Verilen URL'nin engellenip engellenmediğini döner
+ */
+export async function isBlockedUrl(targetUrl: string): Promise<boolean> {
+  if (process.env.ALLOW_PRIVATE_IPS === 'true') {
+    return false;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    return true;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  const allowList = (process.env.OPEN_NOTEBOOK_ALLOW_LIST || '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (allowList.includes(hostname)) {
+    return false;
+  }
+
+  // Cloud metadata hostnames/IPs check
+  const blockedMetadataHosts = [
+    '169.254.169.254',
+    '100.100.100.200',
+    '168.63.129.16',
+    'metadata.google.internal',
+    'metadata.google.internal.',
+  ];
+  if (blockedMetadataHosts.includes(hostname)) {
+    return true;
+  }
+
+  if (net.isIP(hostname)) {
+    return isPrivateOrReservedIP(hostname);
+  }
+
+  try {
+    const records = await dns.lookup(hostname, { all: true });
+    if (!records || records.length === 0) return true;
+    for (const record of records) {
+      if (isPrivateOrReservedIP(record.address)) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return true;
+  }
 }
 
 /**
