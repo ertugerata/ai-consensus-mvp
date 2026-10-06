@@ -10,39 +10,59 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { baseUrl, endpoint, payload } = body;
+    const { action, notebookId } = body;
 
-    if (!baseUrl || typeof baseUrl !== 'string') {
-      return NextResponse.json({ error: 'baseUrl parametresi zorunludur.' }, { status: 400 });
-    }
+    const envBaseUrl = process.env.OPEN_NOTEBOOK_URL || 'http://localhost:5055';
+    const envApiKey = process.env.OPEN_NOTEBOOK_API_KEY || '';
 
     const allowPrivate = process.env.ALLOW_PRIVATE_IPS === 'true';
 
     // 2. SSRF, IPv6 ve DNS Rebinding Koruması ile IP Sabitleme
-    const { pinnedUrl, originalHost } = await validateAndPinTargetUrl(baseUrl, allowPrivate);
+    const { pinnedUrl, originalHost } = await validateAndPinTargetUrl(envBaseUrl, allowPrivate);
 
-    // Endpoint sanitization (Sadece izin verilen MCP uç noktalarına geçiş ver)
-    const sanitizedEndpoint = (endpoint || '').replace(/^\/+/, '');
-    const allowedEndpoints = ['v1/chat/completions', 'v1/tools/call', 'v1/models'];
-    
-    if (!allowedEndpoints.includes(sanitizedEndpoint)) {
-      return NextResponse.json({ error: 'İzin verilmeyen uç nokta.' }, { status: 403 });
-    }
-
-    const targetUrl = `${pinnedUrl}/${sanitizedEndpoint}`;
-
-    // 3. Sabitlenmiş IP'ye İstek Atma (Host Header Orijinal Domain Olarak Ezilir)
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000); // 15s Timeout
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Host': originalHost,
+    };
+    if (envApiKey) {
+      headers['Authorization'] = `Bearer ${envApiKey}`;
+      headers['x-api-key'] = envApiKey;
+    }
+
+    let targetUrl = '';
+    let fetchOptions: RequestInit = { headers, signal: controller.signal };
+
+    if (action === 'test') {
+      targetUrl = `${pinnedUrl}/api/v1/healthcheck`;
+      fetchOptions = { ...fetchOptions, method: 'GET' };
+    } else if (action === 'list_notebooks') {
+      targetUrl = `${pinnedUrl}/api/v1/notebooks`;
+      fetchOptions = { ...fetchOptions, method: 'GET' };
+    } else if (action === 'get_notebook') {
+      if (!notebookId) {
+        clearTimeout(timeout);
+        return NextResponse.json({ error: 'notebookId parametresi zorunludur.' }, { status: 400 });
+      }
+      targetUrl = `${pinnedUrl}/api/v1/notebooks/${encodeURIComponent(notebookId)}`;
+      fetchOptions = { ...fetchOptions, method: 'GET' };
+    } else {
+      // Direct endpoint proxy fallback for legacy calls
+      const endpoint = (body.endpoint || '').replace(/^\/+/, '');
+      const allowedEndpoints = ['v1/chat/completions', 'v1/tools/call', 'v1/models', 'api/v1/notebooks'];
+
+      if (!allowedEndpoints.includes(endpoint)) {
+        clearTimeout(timeout);
+        return NextResponse.json({ error: 'İzin verilmeyen veya desteklenmeyen eylem.' }, { status: 403 });
+      }
+      targetUrl = `${pinnedUrl}/${endpoint}`;
+      fetchOptions = { ...fetchOptions, method: 'POST', body: JSON.stringify(body.payload || {}) };
+    }
+
     const upstreamResponse = await fetch(targetUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Host': originalHost, // DNS Rebinding ve VHost yönlendirmesi için gerekli
-      },
-      body: JSON.stringify(payload || {}),
-      signal: controller.signal,
+      ...fetchOptions,
     });
 
     clearTimeout(timeout);
@@ -90,6 +110,20 @@ export async function POST(req: NextRequest) {
       data = JSON.parse(textData);
     } catch {
       data = { raw: textData };
+    }
+
+    if (action === 'test') {
+      return NextResponse.json({ success: upstreamResponse.ok, message: upstreamResponse.ok ? 'Open-Notebook sunucu bağlantısı başarılı!' : 'Sunucu yanıt verdi ancak hata döndü.' });
+    }
+
+    if (action === 'list_notebooks') {
+      const notebooks = Array.isArray(data) ? data : (data.notebooks || data.data || []);
+      return NextResponse.json({ notebooks });
+    }
+
+    if (action === 'get_notebook') {
+      const content = typeof data === 'string' ? data : (data.content || data.formattedText || JSON.stringify(data, null, 2));
+      return NextResponse.json({ content });
     }
 
     return NextResponse.json(data, { status: upstreamResponse.status });
