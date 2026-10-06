@@ -16,6 +16,7 @@ export const AgentConfigSchema = z.object({
   name: z.string().max(100).optional(),
   provider: ProviderSchema,
   model: z.string().min(1, 'Model adı boş olamaz').max(150),
+  skill: z.string().max(100).optional(),
   systemPrompt: z.string().max(10000).optional(),
   temperature: z.number().min(0).max(2).optional(),
 });

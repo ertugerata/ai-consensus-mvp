@@ -25,10 +25,6 @@ interface McpModalProps {
   isDark: boolean;
   showMcpModal: boolean;
   setShowMcpModal: (show: boolean) => void;
-  mcpBaseUrl: string;
-  setMcpBaseUrl: (url: string) => void;
-  mcpApiKey: string;
-  setMcpApiKey: (key: string) => void;
   mcpTesting: boolean;
   mcpTestStatus: { success?: boolean; error?: string; message?: string } | null;
   mcpNotebooks: McpNotebookItem[];
@@ -46,10 +42,6 @@ export function McpModal({
   isDark,
   showMcpModal,
   setShowMcpModal,
-  mcpBaseUrl,
-  setMcpBaseUrl,
-  mcpApiKey,
-  setMcpApiKey,
   mcpTesting,
   mcpTestStatus,
   mcpNotebooks,
@@ -91,38 +83,20 @@ export function McpModal({
           </button>
         </div>
 
-        {/* Server Connection Bar */}
+        {/* Server Connection Info Bar */}
         <div className={`p-4 border-b space-y-3 ${isDark ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <div className="flex-1 space-y-1">
-              <label className="text-[11px] font-semibold text-slate-400">Open-Notebook IP / Sunucu Adresi (URL)</label>
-              <input
-                type="text"
-                value={mcpBaseUrl}
-                onChange={(e) => setMcpBaseUrl(e.target.value)}
-                placeholder="http://192.168.1.100:5055 veya http://localhost:5055"
-                className={`w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-900'
-                }`}
-              />
-            </div>
-            <div className="w-full sm:w-48 space-y-1">
-              <label className="text-[11px] font-semibold text-slate-400">API Anahtarı (Opsiyonel)</label>
-              <input
-                type="password"
-                value={mcpApiKey}
-                onChange={(e) => setMcpApiKey(e.target.value)}
-                placeholder="Token"
-                className={`w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-900'
-                }`}
-              />
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs space-y-1">
+              <span className="font-semibold text-slate-300">Sunucu Adresi & Anahtarları:</span>
+              <p className="text-[11px] text-slate-400">
+                Open-Notebook sunucu adresi ve API anahtarı sunucu tarafında <code>OPEN_NOTEBOOK_URL</code> ve <code>OPEN_NOTEBOOK_API_KEY</code> ortam değişkenlerinden alınır.
+              </p>
             </div>
             <button
               type="button"
               onClick={onTestMcpConnection}
-              disabled={mcpTesting || !mcpBaseUrl}
-              className="sm:self-end bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shrink-0"
+              disabled={mcpTesting}
+              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shrink-0"
             >
               {mcpTesting ? <Loader2 size={14} className="animate-spin" /> : <Server size={14} />}
               <span>Bağlan & Yenile</span>
@@ -168,7 +142,7 @@ export function McpModal({
             <div className="p-8 text-center border border-dashed rounded-xl border-slate-800 text-slate-500 text-xs space-y-2">
               <BookOpen size={24} className="mx-auto text-slate-600" />
               <p>Open-Notebook sunucusunda listelenecek notebook bulunamadı veya henüz bağlanılmadı.</p>
-              <p className="text-[11px] text-slate-600">IP adresini ve sunucunun çalıştığını (port 5055) kontrol edip &apos;Bağlan&apos; butonuna basın.</p>
+              <p className="text-[11px] text-slate-600">Sunucunun çalıştığını ve <code>.env</code> içindeki <code>OPEN_NOTEBOOK_URL</code> değerini kontrol edip &apos;Bağlan & Yenile&apos; butonuna basın.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

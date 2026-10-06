@@ -3,16 +3,17 @@
 import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { AlertCircle } from 'lucide-react';
 import {
-  ApiKeys,
   ConfigState,
   ConfigStateSchema,
   MultiStageResults,
   AgentExecutionResult,
   AgentConfig,
+  ProviderType,
   getPrimaryAgents,
 } from '@/lib/types';
 import {
   DEFAULT_CONFIG,
+  AGENT_SKILLS,
 } from '@/lib/config/agents';
 import { Sidebar, SessionListItem } from '@/components/Sidebar';
 import { Navbar } from '@/components/Navbar';
@@ -20,13 +21,6 @@ import { PromptForm } from '@/components/PromptForm';
 import { ResultsView } from '@/components/ResultsView';
 import { SettingsModal } from '@/components/SettingsModal';
 import { McpModal, McpNotebookItem } from '@/components/McpModal';
-
-const DEFAULT_KEYS: ApiKeys = {
-  openai: '',
-  anthropic: '',
-  gemini: '',
-  openrouter: '',
-};
 
 const MAX_MEMORY_CHARS = 200000;
 
@@ -43,10 +37,7 @@ export default function Home() {
   const [memory, setMemory] = useState('');
   const [evaluationCriteria, setEvaluationCriteria] = useState('');
   const [showSettings, setShowSettings] = useState(false);
-  const [openNotebookUrl, setOpenNotebookUrl] = useState('http://localhost:5055');
-  const [openNotebookApiKey, setOpenNotebookApiKey] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showKeys, setShowKeys] = useState(false);
   const [copied, setCopied] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sessionWarning, setSessionWarning] = useState<string | null>(null);
@@ -54,10 +45,17 @@ export default function Home() {
   const [enableCrossReview, setEnableCrossReview] = useState(true);
   const [activeStageTab, setActiveStageTab] = useState<'stage1' | 'stage2' | 'stage3'>('stage3');
 
+  // Configured Providers Status from Server .env
+  const [configuredProviders, setConfiguredProviders] = useState<Record<ProviderType, boolean>>({
+    openai: true,
+    anthropic: true,
+    gemini: true,
+    openrouter: true,
+    ollama: true,
+  });
+
   // Open-Notebook MCP Modal State
   const [showMcpModal, setShowMcpModal] = useState(false);
-  const [mcpBaseUrl, setMcpBaseUrl] = useState('http://localhost:5055');
-  const [mcpApiKey, setMcpApiKey] = useState('');
   const [mcpTesting, setMcpTesting] = useState(false);
   const [mcpTestStatus, setMcpTestStatus] = useState<{ success?: boolean; error?: string; message?: string } | null>(null);
   const [mcpNotebooks, setMcpNotebooks] = useState<McpNotebookItem[]>([]);
@@ -69,7 +67,6 @@ export default function Home() {
   const filesInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
-  const [apiKeys, setApiKeys] = useState<ApiKeys>(DEFAULT_KEYS);
   const [config, setConfig] = useState<ConfigState>(DEFAULT_CONFIG);
   const [stageResults, setStageResults] = useState<MultiStageResults | null>(null);
 
@@ -100,20 +97,32 @@ export default function Home() {
     }
   };
 
+  // Fetch Configured Providers from server
+  const fetchProvidersStatus = async () => {
+    try {
+      const res = await fetch('/api/providers', {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.configuredProviders) {
+          setConfiguredProviders(data.configuredProviders);
+        }
+      }
+    } catch (err) {
+      console.error('Provider durumu alınamadı:', err);
+    }
+  };
+
   // Load configuration and session list on mount
   useEffect(() => {
     fetchSessionsList();
+    fetchProvidersStatus();
 
     try {
       const savedTheme = localStorage.getItem('ai_consensus_theme') as 'dark' | 'light' | null;
       if (savedTheme === 'dark' || savedTheme === 'light') {
         setTheme(savedTheme);
-      }
-
-      const savedKeys = localStorage.getItem('ai_consensus_keys');
-      if (savedKeys) {
-        const parsedKeys = JSON.parse(savedKeys);
-        setApiKeys({ ...DEFAULT_KEYS, ...parsedKeys });
       }
 
       const savedConfig = localStorage.getItem('ai_consensus_config');
@@ -139,10 +148,9 @@ export default function Home() {
         setEnableCrossReview(savedCrossReview === 'true');
       }
 
-      const savedNbUrl = localStorage.getItem('ai_consensus_open_notebook_url');
-      if (savedNbUrl) setOpenNotebookUrl(savedNbUrl);
-
-      // Clean up sensitive tokens from localStorage if present
+      // Clean up deprecated local sensitive items
+      localStorage.removeItem('ai_consensus_keys');
+      localStorage.removeItem('ai_consensus_open_notebook_url');
       localStorage.removeItem('ai_consensus_open_notebook_api_key');
       localStorage.removeItem('ai_consensus_api_access_token');
     } catch (err) {
@@ -172,6 +180,7 @@ export default function Home() {
   }, [showSettings]);
 
   const openSettings = () => {
+    fetchProvidersStatus();
     setShowSettings(true);
     if (typeof window !== 'undefined' && window.history) {
       window.history.pushState({ settingsModal: true }, '');
@@ -204,15 +213,10 @@ export default function Home() {
   };
 
   const saveSettings = () => {
-    safeSaveStorage('ai_consensus_keys', JSON.stringify(apiKeys));
     safeSaveStorage('ai_consensus_config', JSON.stringify(config));
     safeSaveStorage('ai_consensus_criteria', evaluationCriteria);
     safeSaveStorage('ai_consensus_memory', memory);
     safeSaveStorage('ai_consensus_cross_review', String(enableCrossReview));
-    safeSaveStorage('ai_consensus_open_notebook_url', openNotebookUrl);
-    // Remove sensitive tokens from localStorage to prevent token exposure via XSS
-    localStorage.removeItem('ai_consensus_open_notebook_api_key');
-    localStorage.removeItem('ai_consensus_api_access_token');
     closeSettings();
   };
 
@@ -274,12 +278,9 @@ export default function Home() {
 
   // Open MCP Modal
   const handleOpenMcpModal = () => {
-    const targetUrl = openNotebookUrl || 'http://localhost:5055';
-    setMcpBaseUrl(targetUrl);
-    setMcpApiKey(openNotebookApiKey || '');
     setShowMcpModal(true);
     setMcpTestStatus(null);
-    fetchMcpNotebooks(targetUrl, openNotebookApiKey || '');
+    fetchMcpNotebooks();
   };
 
   // Test MCP Connection
@@ -292,14 +293,12 @@ export default function Home() {
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'test',
-          baseUrl: mcpBaseUrl,
-          apiKey: mcpApiKey,
         }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
         setMcpTestStatus({ success: true, message: data.message || 'Bağlantı başarılı!' });
-        fetchMcpNotebooks(mcpBaseUrl, mcpApiKey);
+        fetchMcpNotebooks();
       } else {
         setMcpTestStatus({ success: false, error: data.error || 'Bağlantı kurulamadı.' });
       }
@@ -312,7 +311,7 @@ export default function Home() {
   };
 
   // Fetch Notebooks via MCP
-  const fetchMcpNotebooks = async (url: string, key: string) => {
+  const fetchMcpNotebooks = async () => {
     setMcpLoadingNotebooks(true);
     try {
       const res = await fetch('/api/mcp/open-notebook', {
@@ -320,8 +319,6 @@ export default function Home() {
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'list_notebooks',
-          baseUrl: url,
-          apiKey: key,
         }),
       });
       const data = await res.json();
@@ -347,8 +344,6 @@ export default function Home() {
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'get_notebook',
-          baseUrl: mcpBaseUrl,
-          apiKey: mcpApiKey,
           notebookId: mcpSelectedNotebookId,
         }),
       });
@@ -559,7 +554,6 @@ ${formatAgentResult(s3)}
           prompt,
           memory,
           evaluationCriteria,
-          apiKeys,
           config,
           enableCrossReview,
         }),
@@ -595,12 +589,18 @@ ${formatAgentResult(s3)}
   const handleAddAgent = () => {
     const currentAgents = getPrimaryAgents(config);
     const nextIdx = currentAgents.length + 1;
+    const defaultSkill = AGENT_SKILLS[0];
+    const availableProv = (Object.keys(configuredProviders) as ProviderType[]).find(
+      (p) => configuredProviders[p] !== false
+    ) || 'openai';
+
     const newAgent: AgentConfig = {
       id: `agent_${nextIdx}`,
       name: `Ajan ${nextIdx}`,
-      provider: 'openai',
-      model: 'gpt-4o-mini',
-      systemPrompt: 'Sen analitik ve nesnel bir AI asistanısın.',
+      provider: availableProv,
+      model: availableProv === 'openai' ? 'gpt-4o-mini' : 'claude-3-7-sonnet-20250219',
+      skill: defaultSkill.id,
+      systemPrompt: defaultSkill.prompt,
       temperature: 0.7,
     };
     setConfig({
@@ -748,20 +748,13 @@ ${formatAgentResult(s3)}
         showSettings={showSettings}
         closeSettings={closeSettings}
         saveSettings={saveSettings}
-        apiKeys={apiKeys}
-        setApiKeys={setApiKeys}
-        showKeys={showKeys}
-        setShowKeys={setShowKeys}
         apiAccessToken={apiAccessToken}
         setApiAccessToken={setApiAccessToken}
-        openNotebookUrl={openNotebookUrl}
-        setOpenNotebookUrl={setOpenNotebookUrl}
-        openNotebookApiKey={openNotebookApiKey}
-        setOpenNotebookApiKey={setOpenNotebookApiKey}
         enableCrossReview={enableCrossReview}
         setEnableCrossReview={setEnableCrossReview}
         config={config}
         setConfig={setConfig}
+        configuredProviders={configuredProviders}
         onAddAgent={handleAddAgent}
         onRemoveAgent={handleRemoveAgent}
         onUpdateAgent={handleUpdateAgent}
@@ -772,10 +765,6 @@ ${formatAgentResult(s3)}
         isDark={isDark}
         showMcpModal={showMcpModal}
         setShowMcpModal={setShowMcpModal}
-        mcpBaseUrl={mcpBaseUrl}
-        setMcpBaseUrl={setMcpBaseUrl}
-        mcpApiKey={mcpApiKey}
-        setMcpApiKey={setMcpApiKey}
         mcpTesting={mcpTesting}
         mcpTestStatus={mcpTestStatus}
         mcpNotebooks={mcpNotebooks}

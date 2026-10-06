@@ -4,66 +4,57 @@ import {
   Sliders,
   Check,
   X,
-  EyeOff,
-  Eye,
   AlertCircle,
-  Server,
   Plus,
   Trash2,
   ClipboardCheck,
+  Zap,
 } from 'lucide-react';
 import {
-  ApiKeys,
   ConfigState,
   AgentConfig,
   ProviderType,
   getPrimaryAgents,
 } from '@/lib/types';
-import { PROVIDER_MODEL_PRESETS } from '@/lib/config/agents';
+import { PROVIDER_MODEL_PRESETS, AGENT_SKILLS } from '@/lib/config/agents';
 
 interface SettingsModalProps {
   isDark: boolean;
   showSettings: boolean;
   closeSettings: () => void;
   saveSettings: () => void;
-  apiKeys: ApiKeys;
-  setApiKeys: (keys: ApiKeys) => void;
-  showKeys: boolean;
-  setShowKeys: (show: boolean) => void;
   apiAccessToken: string;
   setApiAccessToken: (token: string) => void;
-  openNotebookUrl: string;
-  setOpenNotebookUrl: (url: string) => void;
-  openNotebookApiKey: string;
-  setOpenNotebookApiKey: (key: string) => void;
   enableCrossReview: boolean;
   setEnableCrossReview: (enable: boolean) => void;
   config: ConfigState;
   setConfig: (config: ConfigState) => void;
+  configuredProviders: Record<ProviderType, boolean>;
   onAddAgent: () => void;
   onRemoveAgent: (agentId: string) => void;
   onUpdateAgent: (agentId: string, updatedAgent: Partial<AgentConfig>) => void;
 }
+
+const PROVIDER_NAMES: Record<ProviderType, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  gemini: 'Google Gemini',
+  openrouter: 'OpenRouter',
+  ollama: 'Ollama (Yerel)',
+};
 
 export function SettingsModal({
   isDark,
   showSettings,
   closeSettings,
   saveSettings,
-  apiKeys,
-  setApiKeys,
-  showKeys,
-  setShowKeys,
   apiAccessToken,
   setApiAccessToken,
-  openNotebookUrl,
-  setOpenNotebookUrl,
-  openNotebookApiKey,
-  setOpenNotebookApiKey,
   enableCrossReview,
   setEnableCrossReview,
   config,
   setConfig,
+  configuredProviders,
   onAddAgent,
   onRemoveAgent,
   onUpdateAgent,
@@ -71,6 +62,12 @@ export function SettingsModal({
   if (!showSettings) return null;
 
   const primaryAgentsList = getPrimaryAgents(config);
+
+  const availableProviderKeys = (Object.keys(PROVIDER_NAMES) as ProviderType[]).filter(
+    (p) => configuredProviders[p] !== false
+  );
+
+  const hasAnyConfiguredProvider = availableProviderKeys.length > 0;
 
   return (
     <div
@@ -91,7 +88,7 @@ export function SettingsModal({
           }`}
         >
           <h2 className="text-lg font-bold flex items-center gap-2 text-blue-500">
-            <Sliders size={20} /> Ajan Harness ve Provider Konfigürasyonu
+            <Sliders size={20} /> Ajan Harness ve Model Yapılandırması
           </h2>
           <div className="flex items-center gap-2">
             <button
@@ -121,127 +118,40 @@ export function SettingsModal({
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Provider API Keys & API Token */}
-          <div>
-            <h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-              1. Provider API Key ve Sistem Doğrulama Ayarları
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-3">
-              {[
-                { key: 'openrouter' as const, label: 'OpenRouter API Key', placeholder: 'sk-or-v1-...' },
-                { key: 'openai' as const, label: 'OpenAI API Key', placeholder: 'sk-...' },
-                { key: 'anthropic' as const, label: 'Anthropic API Key', placeholder: 'sk-ant-...' },
-                { key: 'gemini' as const, label: 'Google Gemini Key', placeholder: 'AIzaSy...' },
-              ].map((item) => (
-                <div key={item.key} className="flex flex-col gap-1.5">
-                  <label htmlFor={`api-key-modal-${item.key}`} className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                    {item.label}
-                  </label>
-                  <div className="relative">
-                    <input
-                      id={`api-key-modal-${item.key}`}
-                      type={showKeys ? 'text' : 'password'}
-                      value={apiKeys[item.key] || ''}
-                      onChange={(e) =>
-                        setApiKeys({ ...apiKeys, [item.key]: e.target.value })
-                      }
-                      placeholder={item.placeholder}
-                      className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        isDark
-                          ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-600'
-                          : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
-                      }`}
-                    />
-                    <button
-                      type="button"
-                      aria-label={showKeys ? 'API Anahtarlarını gizle' : 'API Anahtarlarını göster'}
-                      onClick={() => setShowKeys(!showKeys)}
-                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-200"
-                    >
-                      {showKeys ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              {/* System API Access Token Field */}
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="api-access-token-modal" className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                  API Erişim Token&apos;ı (Sistem Doğrulama)
-                </label>
-                <div className="relative">
-                  <input
-                    id="api-access-token-modal"
-                    type={showKeys ? 'text' : 'password'}
-                    value={apiAccessToken}
-                    onChange={(e) => setApiAccessToken(e.target.value)}
-                    placeholder="API_ACCESS_TOKEN (varsa)..."
-                    className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      isDark
-                        ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-600'
-                        : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
-                    }`}
-                  />
-                </div>
-              </div>
+          {!hasAnyConfiguredProvider && (
+            <div className="p-4 rounded-xl border border-amber-500/50 bg-amber-500/10 text-amber-400 flex items-center gap-3 text-xs">
+              <AlertCircle size={18} className="shrink-0" />
+              <span>
+                Sunucuda herhangi bir API anahtarı tanımlanmamıştır. Lütfen sunucu tarafında <code>.env</code> dosyanıza API anahtarlarınızı (ör. <code>OPENAI_API_KEY</code>, <code>ANTHROPIC_API_KEY</code>, <code>OPENROUTER_API_KEY</code>) veya <code>OLLAMA_BASE_URL</code> değerini ekleyin.
+              </span>
             </div>
+          )}
 
-            <div className={`p-3 rounded-xl border text-xs space-y-2 ${
-              isDark ? 'bg-slate-950/80 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
-            }`}>
-              <div className="flex items-center gap-2">
-                <AlertCircle size={16} className="text-amber-400 shrink-0" />
-                <span>
-                  <strong>Güvenlik Uyarısı:</strong> Tarayıcı ön yüzünden girilen API anahtarları yerel hafızada (localStorage) saklanır. Üretim ortamında anahtarlarınızı sunucu tarafında <code>.env</code> dosyasında tanımlamanız önerilir.
-                </span>
-              </div>
-              <div className="flex items-center gap-2 pt-1 border-t border-slate-800/50">
-                <Server size={16} className="text-blue-400 shrink-0" />
-                <span>
-                  <strong>Ollama Yapılandırması:</strong> Yerel Ollama adresi sunucu tarafında <code>OLLAMA_BASE_URL</code> ortam değişkeni ile belirlenir.
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Open-Notebook MCP Server Settings */}
-          <div>
-            <h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-              2. Open-Notebook MCP Sunucu Ayarları
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                  Open-Notebook IP / Sunucu Adresi (URL)
+          {/* System Access Token Section if needed */}
+          <div className={`p-4 rounded-xl border text-xs space-y-2 ${
+            isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-50 border-slate-200'
+          }`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <label htmlFor="api-access-token-modal" className={`font-semibold text-xs ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                  Sistem API Erişim Token&apos;ı
                 </label>
-                <input
-                  type="text"
-                  value={openNotebookUrl}
-                  onChange={(e) => setOpenNotebookUrl(e.target.value)}
-                  placeholder="http://192.168.1.50:5055 veya http://localhost:5055"
-                  className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    isDark
-                      ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-600'
-                      : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
-                  }`}
-                />
+                <p className="text-[11px] text-slate-400">
+                  Sunucuda <code>API_ACCESS_TOKEN</code> tanımlı ise doğrulamak için buraya girin. API anahtarları ise <code>.env</code> dosyasından çekilmektedir.
+                </p>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <label className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                  Open-Notebook API Anahtarı (Varsa)
-                </label>
-                <input
-                  type="password"
-                  value={openNotebookApiKey}
-                  onChange={(e) => setOpenNotebookApiKey(e.target.value)}
-                  placeholder="İsteğe bağlı API / Auth Token"
-                  className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    isDark
-                      ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-600'
-                      : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
-                  }`}
-                />
-              </div>
+              <input
+                id="api-access-token-modal"
+                type="password"
+                value={apiAccessToken}
+                onChange={(e) => setApiAccessToken(e.target.value)}
+                placeholder="API_ACCESS_TOKEN..."
+                className={`w-full sm:w-64 border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  isDark
+                    ? 'bg-slate-900 border-slate-800 text-slate-100 placeholder-slate-600'
+                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+                }`}
+              />
             </div>
           </div>
 
@@ -250,10 +160,10 @@ export function SettingsModal({
             <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
               <div>
                 <h3 className={`text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                  3. Dinamik Ajan Ayarları (En az 2 Ajan + 1 Hakem)
+                  Ajan ve Beceri (Skill) Yapılandırması (En az 2 Ajan + 1 Hakem)
                 </h3>
                 <p className="text-xs text-slate-400">
-                  İstediğiniz sayıda farklı model ve sağlayıcıya sahip ajan ekleyebilirsiniz.
+                  Ajanlarınız için etkinleştirilmiş API sağlayıcılarından model seçebilir ve her ajana özel bir beceri atayabilirsiniz.
                 </p>
               </div>
 
@@ -314,10 +224,39 @@ export function SettingsModal({
                         </button>
                       </div>
 
+                      {/* Skill (Beceri) Select */}
+                      <div className="space-y-1">
+                        <label className={`text-[11px] font-medium flex items-center gap-1 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                          <Zap size={13} /> Ajan Becerisi (Skill)
+                        </label>
+                        <select
+                          value={ag.skill || 'analytical'}
+                          onChange={(e) => {
+                            const selectedSkill = AGENT_SKILLS.find((s) => s.id === e.target.value);
+                            onUpdateAgent(ag.id || '', {
+                              skill: e.target.value,
+                              systemPrompt: selectedSkill?.prompt || ag.systemPrompt,
+                            });
+                          }}
+                          className={`w-full border rounded-lg p-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                            isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
+                          }`}
+                        >
+                          {AGENT_SKILLS.map((skill) => (
+                            <option key={skill.id} value={skill.id}>
+                              {skill.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-slate-400 italic">
+                          {AGENT_SKILLS.find((s) => s.id === (ag.skill || 'analytical'))?.description}
+                        </p>
+                      </div>
+
                       {/* Provider Select */}
                       <div className="space-y-1">
                         <label className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          Sağlayıcı
+                          Sağlayıcı (.env ile etkinleştirilenler)
                         </label>
                         <select
                           value={ag.provider}
@@ -330,11 +269,14 @@ export function SettingsModal({
                             isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
                           }`}
                         >
-                          <option value="openrouter">OpenRouter</option>
-                          <option value="openai">OpenAI</option>
-                          <option value="anthropic">Anthropic</option>
-                          <option value="gemini">Google Gemini</option>
-                          <option value="ollama">Ollama (Yerel)</option>
+                          {(Object.keys(PROVIDER_NAMES) as ProviderType[]).map((prov) => {
+                            const isConfigured = configuredProviders[prov] !== false;
+                            return (
+                              <option key={prov} value={prov} disabled={!isConfigured}>
+                                {PROVIDER_NAMES[prov]} {!isConfigured ? '(.env anahtar yok)' : ''}
+                              </option>
+                            );
+                          })}
                         </select>
                       </div>
 
@@ -372,21 +314,6 @@ export function SettingsModal({
                           }`}
                         />
                       </div>
-
-                      {/* System Prompt */}
-                      <div className="space-y-1">
-                        <label className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          Sistem İstemi (System Prompt)
-                        </label>
-                        <textarea
-                          value={ag.systemPrompt || ''}
-                          onChange={(e) => onUpdateAgent(ag.id || '', { systemPrompt: e.target.value })}
-                          rows={2}
-                          className={`w-full border rounded-lg p-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                            isDark ? 'bg-slate-900 border-slate-800 text-slate-200 placeholder-slate-600' : 'bg-white border-slate-300 text-slate-800 placeholder-slate-400'
-                          }`}
-                        />
-                      </div>
                     </div>
                   </div>
                 );
@@ -414,11 +341,14 @@ export function SettingsModal({
                     }}
                     className={`w-full border rounded-lg p-1.5 text-xs ${isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-800'}`}
                   >
-                    <option value="openrouter">OpenRouter</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="gemini">Google Gemini</option>
-                    <option value="ollama">Ollama (Yerel)</option>
+                    {(Object.keys(PROVIDER_NAMES) as ProviderType[]).map((prov) => {
+                      const isConfigured = configuredProviders[prov] !== false;
+                      return (
+                        <option key={prov} value={prov} disabled={!isConfigured}>
+                          {PROVIDER_NAMES[prov]} {!isConfigured ? '(.env anahtar yok)' : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
