@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validateApiToken } from '@/lib/security';
-import { validateAndPinTargetUrl } from '@/lib/network-security';
+import { validateApiToken, validateAndPinTargetUrl } from '@/lib/security';
 
 export async function POST(req: NextRequest) {
   // 1. Kimlik Doğrulama Kontrolü
