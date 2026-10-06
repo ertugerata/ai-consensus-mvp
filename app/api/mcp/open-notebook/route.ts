@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     const { pinnedUrl, originalHost } = await validateAndPinTargetUrl(baseUrl, allowPrivate);
 
     // Endpoint sanitization (Sadece izin verilen MCP uç noktalarına geçiş ver)
-    const sanitizedEndpoint = (endpoint || '').replace(/^^\/+/, '');
+    const sanitizedEndpoint = (endpoint || '').replace(/^\/+/, '');
     const allowedEndpoints = ['v1/chat/completions', 'v1/tools/call', 'v1/models'];
     
     if (!allowedEndpoints.includes(sanitizedEndpoint)) {
@@ -49,12 +49,50 @@ export async function POST(req: NextRequest) {
     clearTimeout(timeout);
 
     // 4. Yanıt Boyutu Sınırlaması (Max 2 MB)
+    const maxSizeBytes = 2 * 1024 * 1024;
     const contentLength = upstreamResponse.headers.get('content-length');
-    if (contentLength && parseInt(contentLength, 10) > 2 * 1024 * 1024) {
+    if (contentLength && parseInt(contentLength, 10) > maxSizeBytes) {
       return NextResponse.json({ error: 'Gelen yanıt boyutu çok büyük (Max 2MB).' }, { status: 413 });
     }
 
-    const data = await upstreamResponse.json();
+    if (!upstreamResponse.body) {
+      const data = await upstreamResponse.json().catch(() => ({}));
+      return NextResponse.json(data, { status: upstreamResponse.status });
+    }
+
+    // Response body akışını okuyarak 2 MB sınırını garanti altına alma
+    const reader = upstreamResponse.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        totalBytes += value.length;
+        if (totalBytes > maxSizeBytes) {
+          reader.cancel();
+          return NextResponse.json({ error: 'Gelen yanıt boyutu çok büyük (Max 2MB).' }, { status: 413 });
+        }
+        chunks.push(value);
+      }
+    }
+
+    const combinedChunks = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combinedChunks.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    const textData = new TextDecoder().decode(combinedChunks);
+    let data;
+    try {
+      data = JSON.parse(textData);
+    } catch {
+      data = { raw: textData };
+    }
+
     return NextResponse.json(data, { status: upstreamResponse.status });
 
   } catch (error: any) {
