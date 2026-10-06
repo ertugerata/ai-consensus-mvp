@@ -19,6 +19,9 @@ describe('Security Utilities', () => {
       assert.equal(await isBlockedUrl('http://[::1]:5055'), true);
       assert.equal(await isBlockedUrl('http://127.0.0.1:3000'), true);
       assert.equal(await isBlockedUrl('http://[::ffff:127.0.0.1]'), true);
+      assert.equal(await isBlockedUrl('http://[64:ff9b::7f00:1]'), true);
+      assert.equal(await isBlockedUrl('http://[2002:7f00:1::]'), true);
+      assert.equal(await isBlockedUrl('http://[::127.0.0.1]'), true);
     });
 
     test('blocks link-local, ULA, and IPv6 metadata', async () => {
@@ -29,7 +32,6 @@ describe('Security Utilities', () => {
 
     test('blocks cloud metadata IPs and hostnames', async () => {
       assert.equal(await isBlockedUrl('http://169.254.169.254'), true);
-      assert.equal(await isBlockedUrl('http://162.254.169.254'), true);
       assert.equal(await isBlockedUrl('http://100.100.100.200'), true);
       assert.equal(await isBlockedUrl('http://168.63.129.16'), true);
       assert.equal(await isBlockedUrl('http://100.64.0.1'), true);

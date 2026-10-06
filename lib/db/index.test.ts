@@ -79,7 +79,7 @@ describe('Database Operations (lib/db)', () => {
     assert.equal(fetched?.prompt, 'What is consensus?');
 
     const allSessions = getAllSessions();
-    assert.ok(allSessions.some((s) => s.id === sessionId));
+    assert.ok(allSessions.sessions.some((s) => s.id === sessionId));
 
     const deleted = deleteSessionById(sessionId);
     assert.equal(deleted, true);

@@ -13,8 +13,52 @@ const ALLOWED_MCP_METHODS = [
   'prompts/get',
 ];
 
+const MAX_UPSTREAM_RESPONSE_SIZE = 10 * 1024 * 1024; // 10 MB limit for upstream responses
+
+async function fetchWithLimit(url: string, init?: RequestInit): Promise<Response> {
+  const res = await fetch(url, init);
+  const contentLength = res.headers.get('content-length');
+  if (contentLength && parseInt(contentLength, 10) > MAX_UPSTREAM_RESPONSE_SIZE) {
+    throw new Error(`Upstream yanıtı izin verilen maksimum boyutu (${MAX_UPSTREAM_RESPONSE_SIZE / (1024 * 1024)} MB) aşıyor.`);
+  }
+  return res;
+}
+
 const McpRequestSchema = z.object({
-  baseUrl: z.string().url('Geçerli bir Open-Notebook IP veya URL adresi girin (örn. http://192.168.1.50:5055)'),
+  baseUrl: z
+    .string()
+    .url('Geçerli bir Open-Notebook IP veya URL adresi girin (örn. http://192.168.1.50:5055)')
+    .superRefine((urlStr, ctx) => {
+      try {
+        const parsed = new URL(urlStr);
+        if (parsed.pathname !== '/' && parsed.pathname !== '') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'BaseUrl yol (path) içeremez; yalnızca origin girilmelidir (örn. http://192.168.1.50:5055).',
+          });
+        }
+        if (parsed.search) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'BaseUrl sorgu parametresi (query) içeremez.',
+          });
+        }
+        if (parsed.hash) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'BaseUrl fragment (#) içeremez.',
+          });
+        }
+        if (parsed.username || parsed.password) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'BaseUrl kullanıcı bilgisi (userinfo) içeremez.',
+          });
+        }
+      } catch {
+        // Handled by z.string().url()
+      }
+    }),
   apiKey: z.string().optional().default(''),
   action: z.enum(['test', 'list_notebooks', 'get_notebook', 'mcp_call']),
   notebookId: z.string().optional(),
@@ -73,7 +117,7 @@ export async function POST(req: NextRequest) {
     // 1. ACTION: TEST CONNECTION
     if (action === 'test') {
       try {
-        const testRes = await fetch(`${cleanBaseUrl}/api/v1/notebooks`, {
+        const testRes = await fetchWithLimit(`${cleanBaseUrl}/api/v1/notebooks`, {
           method: 'GET',
           headers,
           redirect: 'error',
@@ -92,7 +136,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Try MCP endpoint or root
-        const mcpTest = await fetch(`${cleanBaseUrl}/mcp`, {
+        const mcpTest = await fetchWithLimit(`${cleanBaseUrl}/mcp`, {
           method: 'POST',
           headers,
           redirect: 'error',
@@ -127,7 +171,7 @@ export async function POST(req: NextRequest) {
     // 2. ACTION: LIST NOTEBOOKS
     if (action === 'list_notebooks') {
       try {
-        const res = await fetch(`${cleanBaseUrl}/api/v1/notebooks`, {
+        const res = await fetchWithLimit(`${cleanBaseUrl}/api/v1/notebooks`, {
           method: 'GET',
           headers,
           redirect: 'error',
@@ -159,7 +203,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Fallback: Try MCP list_resources
-        const mcpRes = await fetch(`${cleanBaseUrl}/mcp`, {
+        const mcpRes = await fetchWithLimit(`${cleanBaseUrl}/mcp`, {
           method: 'POST',
           headers,
           redirect: 'error',
@@ -204,7 +248,7 @@ export async function POST(req: NextRequest) {
       const encodedNotebookId = encodeURIComponent(notebookId);
 
       try {
-        const nbRes = await fetch(`${cleanBaseUrl}/api/v1/notebooks/${encodedNotebookId}`, {
+        const nbRes = await fetchWithLimit(`${cleanBaseUrl}/api/v1/notebooks/${encodedNotebookId}`, {
           method: 'GET',
           headers,
           redirect: 'error',
@@ -225,7 +269,7 @@ export async function POST(req: NextRequest) {
 
         // Fetch sources for notebook
         try {
-          const sourcesRes = await fetch(`${cleanBaseUrl}/api/v1/notebooks/${encodedNotebookId}/sources`, {
+          const sourcesRes = await fetchWithLimit(`${cleanBaseUrl}/api/v1/notebooks/${encodedNotebookId}/sources`, {
             method: 'GET',
             headers,
             redirect: 'error',
@@ -246,7 +290,7 @@ export async function POST(req: NextRequest) {
 
         // Fetch notes for notebook
         try {
-          const notesRes = await fetch(`${cleanBaseUrl}/api/v1/notebooks/${encodedNotebookId}/notes`, {
+          const notesRes = await fetchWithLimit(`${cleanBaseUrl}/api/v1/notebooks/${encodedNotebookId}/notes`, {
             method: 'GET',
             headers,
             redirect: 'error',
@@ -275,7 +319,7 @@ ${notesText ? `### NOTLAR:\n${notesText}\n` : ''}`;
 
         // If both sources and notes were empty, try MCP read_resource
         if (!sourcesText && !notesText) {
-          const mcpRead = await fetch(`${cleanBaseUrl}/mcp`, {
+          const mcpRead = await fetchWithLimit(`${cleanBaseUrl}/mcp`, {
             method: 'POST',
             headers,
             redirect: 'error',
@@ -325,7 +369,7 @@ ${notesText ? `### NOTLAR:\n${notesText}\n` : ''}`;
       }
 
       try {
-        const mcpRes = await fetch(`${cleanBaseUrl}/mcp`, {
+        const mcpRes = await fetchWithLimit(`${cleanBaseUrl}/mcp`, {
           method: 'POST',
           headers,
           redirect: 'error',

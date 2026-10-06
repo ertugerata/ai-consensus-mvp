@@ -15,12 +15,16 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const sessions = getAllSessions();
-    return NextResponse.json({ sessions }, { status: 200 });
+    const { searchParams } = new URL(req.url);
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '50', 10);
+
+    const result = getAllSessions(page, limit);
+    return NextResponse.json(result, { status: 200 });
   } catch (error: unknown) {
     console.error('Session listesi alınamadı:', error);
     return NextResponse.json(
-      { error: 'Session listesi alınırken hata oluştu.' },
+      { error: 'Session listesi alınırken veritabanı hatası oluştu.' },
       { status: 500 }
     );
   }
