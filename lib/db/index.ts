@@ -5,6 +5,7 @@ import type { MultiStageResults, ConfigState } from '../types.ts';
 
 export interface SessionRecord {
   id: string;
+  token_hash?: string;
   title: string;
   prompt: string;
   memory: string;
@@ -26,6 +27,7 @@ export interface SessionListItem {
 
 export interface SessionFull {
   id: string;
+  tokenHash?: string;
   title: string;
   prompt: string;
   memory: string;
@@ -59,7 +61,7 @@ function getDb(): Database.Database {
   } catch (err) {
     dbInstance = null;
     console.error(
-      `Veritabanı dosyası açılamadı (${dbPath}). 'data' dizininin okuma/yazma izinlerini ve sahipliğini kontrol edin (örn. chown 1001:1001 data veya chmod 755 data).`,
+      `Veritabanı dosyası açılamadı (${dbPath}). 'data' dizininin okuma/yazma izinlerini ve sahipliğini kontrol edin (örn. chown -R 1001:1001 /app/data veya chmod 755 data).`,
       err
     );
     throw err;
@@ -77,6 +79,7 @@ function getDb(): Database.Database {
     db.exec(`
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
+        token_hash TEXT DEFAULT '',
         title TEXT NOT NULL,
         prompt TEXT NOT NULL,
         memory TEXT DEFAULT '',
@@ -87,7 +90,17 @@ function getDb(): Database.Database {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+    `);
+
+    try {
+      db.exec("ALTER TABLE sessions ADD COLUMN token_hash TEXT DEFAULT ''");
+    } catch {
+      // Column already exists
+    }
+
+    db.exec(`
       CREATE INDEX IF NOT EXISTS idx_sessions_created_at ON sessions(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);
     `);
 
     dbInstance = db;
@@ -102,29 +115,55 @@ function getDb(): Database.Database {
   }
 }
 
-export function getAllSessions(page: number = 1, limit: number = 50): { sessions: SessionListItem[]; total: number; page: number; limit: number } {
+export function getAllSessions(
+  page: number = 1,
+  limit: number = 50,
+  tokenHash?: string
+): { sessions: SessionListItem[]; total: number; page: number; limit: number } {
   try {
     const db = getDb();
-    const offset = (Math.max(1, page) - 1) * Math.max(1, limit);
-    const countStmt = db.prepare('SELECT COUNT(*) as count FROM sessions');
-    const totalRow = countStmt.get() as { count: number } | undefined;
-    const total = totalRow ? totalRow.count : 0;
+    const safeLimit = Math.min(100, Math.max(1, limit));
+    const safePage = Math.max(1, page);
+    const offset = (safePage - 1) * safeLimit;
 
-    const stmt = db.prepare(`
-      SELECT id, title, prompt, created_at, updated_at
-      FROM sessions
-      ORDER BY created_at DESC
-      LIMIT ? OFFSET ?
-    `);
-    const sessions = stmt.all(limit, offset) as SessionListItem[];
-    return { sessions, total, page, limit };
+    let total = 0;
+    let sessions: SessionListItem[] = [];
+
+    if (tokenHash) {
+      const countStmt = db.prepare('SELECT COUNT(*) as count FROM sessions WHERE token_hash = ? OR token_hash = \'\' OR token_hash IS NULL');
+      const totalRow = countStmt.get(tokenHash) as { count: number } | undefined;
+      total = totalRow ? totalRow.count : 0;
+
+      const stmt = db.prepare(`
+        SELECT id, title, prompt, created_at, updated_at
+        FROM sessions
+        WHERE token_hash = ? OR token_hash = '' OR token_hash IS NULL
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+      `);
+      sessions = stmt.all(tokenHash, safeLimit, offset) as SessionListItem[];
+    } else {
+      const countStmt = db.prepare('SELECT COUNT(*) as count FROM sessions');
+      const totalRow = countStmt.get() as { count: number } | undefined;
+      total = totalRow ? totalRow.count : 0;
+
+      const stmt = db.prepare(`
+        SELECT id, title, prompt, created_at, updated_at
+        FROM sessions
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+      `);
+      sessions = stmt.all(safeLimit, offset) as SessionListItem[];
+    }
+
+    return { sessions, total, page: safePage, limit: safeLimit };
   } catch (err) {
     console.error('Session listesi veritabanından alınamadı:', err);
     throw err;
   }
 }
 
-export function getSessionById(id: string): SessionFull | null {
+export function getSessionById(id: string, requesterTokenHash?: string): SessionFull | null {
   try {
     const db = getDb();
     const stmt = db.prepare(`
@@ -132,6 +171,11 @@ export function getSessionById(id: string): SessionFull | null {
     `);
     const row = stmt.get(id) as SessionRecord | undefined;
     if (!row) return null;
+
+    const existingHash = row.token_hash || '';
+    if (requesterTokenHash !== undefined && existingHash && existingHash !== (requesterTokenHash || '')) {
+      return null;
+    }
 
     let parsedConfig: ConfigState;
     try {
@@ -151,6 +195,7 @@ export function getSessionById(id: string): SessionFull | null {
 
     return {
       id: row.id,
+      tokenHash: row.token_hash || '',
       title: row.title,
       prompt: row.prompt,
       memory: row.memory || '',
@@ -169,6 +214,7 @@ export function getSessionById(id: string): SessionFull | null {
 
 export function saveSession(session: {
   id: string;
+  tokenHash?: string;
   title?: string;
   prompt: string;
   memory?: string;
@@ -182,8 +228,15 @@ export function saveSession(session: {
 
   const saveTransaction = db.transaction(() => {
     const existing = getSessionById(session.id);
-    if (existing && !session.allowOverwrite) {
-      throw new Error(`Session ID '${session.id}' halihazırda mevcut. Üzerine yazmak için 'allowOverwrite' seçeneğini etkinleştirin.`);
+    if (existing) {
+      const existingHash = existing.tokenHash || '';
+      const incomingHash = session.tokenHash || '';
+      if (existingHash && existingHash !== incomingHash) {
+        throw new Error('403 Forbidden: Bu oturum üzerinde işlem yapma yetkiniz yok.');
+      }
+      if (!session.allowOverwrite) {
+        throw new Error(`Session ID '${session.id}' halihazırda mevcut. Üzerine yazmak için 'allowOverwrite' seçeneğini etkinleştirin.`);
+      }
     }
 
     const now = new Date().toISOString();
@@ -191,11 +244,12 @@ export function saveSession(session: {
 
     const stmt = db.prepare(`
       INSERT INTO sessions (
-        id, title, prompt, memory, evaluation_criteria, config, enable_cross_review, results, created_at, updated_at
+        id, token_hash, title, prompt, memory, evaluation_criteria, config, enable_cross_review, results, created_at, updated_at
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
       ON CONFLICT(id) DO UPDATE SET
+        token_hash = excluded.token_hash,
         title = excluded.title,
         prompt = excluded.prompt,
         memory = excluded.memory,
@@ -208,6 +262,7 @@ export function saveSession(session: {
 
     stmt.run(
       session.id,
+      session.tokenHash || '',
       title,
       session.prompt,
       session.memory || '',
@@ -225,15 +280,28 @@ export function saveSession(session: {
   return getSessionById(session.id)!;
 }
 
-export function deleteSessionById(id: string): boolean {
+export function deleteSessionById(id: string, requesterTokenHash?: string): boolean {
   try {
     const db = getDb();
+    const existing = getSessionById(id);
+    if (!existing) return false;
+
+    const existingHash = existing.tokenHash || '';
+    const incomingHash = requesterTokenHash || '';
+
+    if (existingHash && existingHash !== incomingHash) {
+      throw new Error('403 Forbidden: Bu oturumu silme yetkiniz yok.');
+    }
+
     const stmt = db.prepare(`
       DELETE FROM sessions WHERE id = ?
     `);
     const result = stmt.run(id);
     return result.changes > 0;
-  } catch (err) {
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.startsWith('403')) {
+      throw err;
+    }
     console.warn(`Session ID '${id}' silinemedi (veritabanı hatası):`, err);
     return false;
   }

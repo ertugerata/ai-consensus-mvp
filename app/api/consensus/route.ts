@@ -2,23 +2,24 @@ import { NextResponse } from 'next/server';
 import { RequestBodySchema } from '@/lib/types';
 import { runMultiStageHarness } from '@/lib/harness/engine';
 import { saveSession } from '@/lib/db';
-import { checkRateLimit, verifyApiToken } from '@/lib/security';
+import { checkRateLimit, getTokenHash, verifyApiToken } from '@/lib/security';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
+const MAX_REQUEST_BODY_SIZE = 1 * 1024 * 1024; // 1 MB limit
 
 export async function POST(req: Request) {
-  if (checkRateLimit(req, 10)) {
-    return NextResponse.json(
-      { error: 'Çok fazla istek gönderildi. Lütfen bir dakika bekledikten sonra tekrar deneyin.' },
-      { status: 429 }
-    );
-  }
-
   if (!verifyApiToken(req)) {
     return NextResponse.json(
       { error: 'Erişim yetkisiz. Geçerli API erişim token\'ı gereklidir.' },
       { status: 401 }
+    );
+  }
+
+  if (checkRateLimit(req, 10)) {
+    return NextResponse.json(
+      { error: 'Çok fazla istek gönderildi. Lütfen bir dakika bekledikten sonra tekrar deneyin.' },
+      { status: 429 }
     );
   }
 
@@ -31,9 +32,19 @@ export async function POST(req: Request) {
       );
     }
 
+    const contentLength = req.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > MAX_REQUEST_BODY_SIZE) {
+      return NextResponse.json({ error: 'İstek gövdesi izin verilen 1 MB sınırını aşıyor.' }, { status: 413 });
+    }
+
+    const textBody = await req.text();
+    if (textBody.length > MAX_REQUEST_BODY_SIZE) {
+      return NextResponse.json({ error: 'İstek gövdesi izin verilen 1 MB sınırını aşıyor.' }, { status: 413 });
+    }
+
     let jsonBody: unknown;
     try {
-      jsonBody = await req.json();
+      jsonBody = JSON.parse(textBody);
     } catch {
       return NextResponse.json({ error: 'Geçersiz JSON gövdesi.' }, { status: 400 });
     }
@@ -70,9 +81,11 @@ export async function POST(req: Request) {
 
     // Save session to SQLite database
     let sessionSaved = false;
+    const tokenHash = getTokenHash(req);
     try {
       saveSession({
         id: activeSessionId,
+        tokenHash,
         title: title || prompt.slice(0, 60).trim() || 'Yeni Oturum',
         prompt,
         memory,

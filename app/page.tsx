@@ -142,11 +142,9 @@ export default function Home() {
       const savedNbUrl = localStorage.getItem('ai_consensus_open_notebook_url');
       if (savedNbUrl) setOpenNotebookUrl(savedNbUrl);
 
-      const savedNbKey = localStorage.getItem('ai_consensus_open_notebook_api_key');
-      if (savedNbKey) setOpenNotebookApiKey(savedNbKey);
-
-      const savedAccessToken = localStorage.getItem('ai_consensus_api_access_token');
-      if (savedAccessToken) setApiAccessToken(savedAccessToken);
+      // Clean up sensitive tokens from localStorage if present
+      localStorage.removeItem('ai_consensus_open_notebook_api_key');
+      localStorage.removeItem('ai_consensus_api_access_token');
     } catch (err) {
       console.error('localStorage okuma hatası:', err);
     }
@@ -212,8 +210,9 @@ export default function Home() {
     safeSaveStorage('ai_consensus_memory', memory);
     safeSaveStorage('ai_consensus_cross_review', String(enableCrossReview));
     safeSaveStorage('ai_consensus_open_notebook_url', openNotebookUrl);
-    safeSaveStorage('ai_consensus_open_notebook_api_key', openNotebookApiKey);
-    safeSaveStorage('ai_consensus_api_access_token', apiAccessToken);
+    // Remove sensitive tokens from localStorage to prevent token exposure via XSS
+    localStorage.removeItem('ai_consensus_open_notebook_api_key');
+    localStorage.removeItem('ai_consensus_api_access_token');
     closeSettings();
   };
 

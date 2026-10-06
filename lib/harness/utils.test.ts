@@ -75,3 +75,43 @@ test('ConfigStateSchema rejects duplicate agent IDs or referee ID collisions', (
   const parsedRef = ConfigStateSchema.safeParse(refereeCollisionConfig);
   assert.equal(parsedRef.success, false);
 });
+
+test('ConfigStateSchema rejects prototype pollution keys like __proto__ or constructor', () => {
+  const protoConfig = {
+    agents: [
+      { id: '__proto__', provider: 'openai' as const, model: 'gpt-4o-mini' },
+      { id: 'ag2', provider: 'anthropic' as const, model: 'claude-3-5-haiku-20241022' },
+    ],
+    referee: { id: 'referee', provider: 'openrouter' as const, model: 'anthropic/claude-3.5-sonnet' },
+  };
+
+  const parsed = ConfigStateSchema.safeParse(protoConfig);
+  assert.equal(parsed.success, false);
+
+  const ctorConfig = {
+    agents: [
+      { id: 'constructor', provider: 'openai' as const, model: 'gpt-4o-mini' },
+      { id: 'ag2', provider: 'anthropic' as const, model: 'claude-3-5-haiku-20241022' },
+    ],
+    referee: { id: 'referee', provider: 'openrouter' as const, model: 'anthropic/claude-3.5-sonnet' },
+  };
+
+  const parsedCtor = ConfigStateSchema.safeParse(ctorConfig);
+  assert.equal(parsedCtor.success, false);
+});
+
+test('ConfigStateSchema rejects more than 10 agents', () => {
+  const elevenAgents = Array.from({ length: 11 }, (_, i) => ({
+    id: `agent_${i + 1}`,
+    provider: 'openai' as const,
+    model: 'gpt-4o-mini',
+  }));
+
+  const overLimitConfig = {
+    agents: elevenAgents,
+    referee: { id: 'referee', provider: 'openrouter' as const, model: 'anthropic/claude-3.5-sonnet' },
+  };
+
+  const parsed = ConfigStateSchema.safeParse(overLimitConfig);
+  assert.equal(parsed.success, false);
+});
