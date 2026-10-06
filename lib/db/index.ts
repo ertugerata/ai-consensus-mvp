@@ -59,7 +59,7 @@ function getDb(): Database.Database {
   } catch (err) {
     dbInstance = null;
     console.error(
-      `Veritabanı dosyası açılamadı (${dbPath}). 'data' dizininin okuma/yazma izinlerini kontrol edin (örn. chmod 777 data veya chown 1001:1001 data).`,
+      `Veritabanı dosyası açılamadı (${dbPath}). 'data' dizininin okuma/yazma izinlerini ve sahipliğini kontrol edin (örn. chown 1001:1001 data veya chmod 755 data).`,
       err
     );
     throw err;
@@ -102,18 +102,25 @@ function getDb(): Database.Database {
   }
 }
 
-export function getAllSessions(): SessionListItem[] {
+export function getAllSessions(page: number = 1, limit: number = 50): { sessions: SessionListItem[]; total: number; page: number; limit: number } {
   try {
     const db = getDb();
+    const offset = (Math.max(1, page) - 1) * Math.max(1, limit);
+    const countStmt = db.prepare('SELECT COUNT(*) as count FROM sessions');
+    const totalRow = countStmt.get() as { count: number } | undefined;
+    const total = totalRow ? totalRow.count : 0;
+
     const stmt = db.prepare(`
       SELECT id, title, prompt, created_at, updated_at
       FROM sessions
       ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
     `);
-    return stmt.all() as SessionListItem[];
+    const sessions = stmt.all(limit, offset) as SessionListItem[];
+    return { sessions, total, page, limit };
   } catch (err) {
-    console.warn('Session listesi veritabanından alınamadı (okuma/yazma izni hatası olabilir):', err);
-    return [];
+    console.error('Session listesi veritabanından alınamadı:', err);
+    throw err;
   }
 }
 

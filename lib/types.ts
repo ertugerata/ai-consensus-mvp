@@ -4,7 +4,7 @@ export const ProviderSchema = z.enum(['openai', 'anthropic', 'gemini', 'openrout
 export type ProviderType = z.infer<typeof ProviderSchema>;
 
 export const AgentConfigSchema = z.object({
-  id: z.string().optional(),
+  id: z.string().regex(/^[a-z0-9_-]{1,40}$/i, "Ajan ID'si yalnızca harf, rakam, tire veya alt çizgi içermeli ve en fazla 40 karakter olmalıdır").optional(),
   name: z.string().max(100).optional(),
   provider: ProviderSchema,
   model: z.string().min(1, 'Model adı boş olamaz').max(150),
@@ -22,7 +22,7 @@ export const ApiKeysSchema = z.object({
 export type ApiKeys = z.infer<typeof ApiKeysSchema>;
 
 export const ConfigStateSchema = z.object({
-  agents: z.array(AgentConfigSchema).min(2, 'En az 2 ajan tanımlanmalıdır').optional(),
+  agents: z.array(AgentConfigSchema).min(2, 'En az 2 ajan tanımlanmalıdır').max(10, 'En fazla 10 ajan tanımlanabilir').optional(),
   /** @deprecated AgentA, AgentB, AgentC legacy format for backwards compatibility */
   agentA: AgentConfigSchema.optional(),
   /** @deprecated AgentA, AgentB, AgentC legacy format for backwards compatibility */
@@ -111,8 +111,8 @@ export type AgentExecutionResult = z.infer<typeof AgentExecutionResultSchema>;
 export const MultiStageResultsSchema = z.object({
   sessionId: z.string().optional(),
   sessionSaved: z.boolean().optional(),
-  stage1Divergence: z.record(z.string(), AgentExecutionResultSchema),
-  stage2CrossReview: z.record(z.string(), AgentExecutionResultSchema).optional(),
+  stage1Divergence: z.record(z.string().max(40), AgentExecutionResultSchema),
+  stage2CrossReview: z.record(z.string().max(40), AgentExecutionResultSchema).optional(),
   stage3Synthesis: AgentExecutionResultSchema,
   totalLatencyMs: z.number(),
 });

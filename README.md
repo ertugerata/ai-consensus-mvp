@@ -77,7 +77,7 @@ ai-consensus-mvp/
 │   │   ├── openai.ts             # OpenAI Provider entegrasyonu
 │   │   └── openrouter.ts         # OpenRouter Provider entegrasyonu
 │   ├── security.ts               # SSRF engelleme, API Token doğrulaması ve Rate Limit yardımcısı
-│   ├── security.test.ts          # Güvenlik modülleri birim testleri (17 test)
+│   ├── security.test.ts          # Güvenlik modülleri birim testleri (18 test)
 │   └── types.ts                  # Zod Şemaları, Harness ve Ajan Tip Tanımlamaları
 ├── public/                       # Statik dosyalar
 ├── .dockerignore                 # Docker derleme dışı bırakılacak dosyalar
