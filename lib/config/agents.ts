@@ -1,4 +1,4 @@
-import { ConfigState, ProviderType } from '../types';
+import type { ConfigState, ProviderType, AgentSkill } from '../types.ts';
 
 export const PROVIDER_MODEL_PRESETS: Record<ProviderType, string[]> = {
   openai: [
@@ -38,12 +38,7 @@ export const PROVIDER_MODEL_PRESETS: Record<ProviderType, string[]> = {
   ],
 };
 
-export interface AgentSkill {
-  id: string;
-  name: string;
-  description: string;
-  prompt: string;
-}
+export type { AgentSkill };
 
 export const AGENT_SKILLS: AgentSkill[] = [
   {

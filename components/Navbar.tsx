@@ -1,6 +1,6 @@
 'use client';
 
-import { PanelLeft, Settings, Sun, Moon } from 'lucide-react';
+import { PanelLeft, Settings, Sun, Moon, Sparkles } from 'lucide-react';
 
 interface NavbarProps {
   isDark: boolean;
@@ -10,6 +10,8 @@ interface NavbarProps {
   showSettings: boolean;
   openSettings: () => void;
   closeSettings: () => void;
+  openSkillManager?: () => void;
+  skillCount?: number;
 }
 
 export function Navbar({
@@ -66,6 +68,27 @@ export function Navbar({
         >
           {isDark ? <Sun size={16} /> : <Moon size={16} />}
         </button>
+
+        {/* Skills Manager Button */}
+        {openSkillManager && (
+          <button
+            onClick={openSkillManager}
+            aria-label="Ajan becerilerini yönet"
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
+              isDark
+                ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-indigo-400'
+                : 'bg-white hover:bg-slate-100 border-slate-200 text-indigo-700 shadow-sm'
+            }`}
+          >
+            <Sparkles size={16} />
+            <span className="hidden sm:inline">Beceriler (.md)</span>
+            {typeof skillCount === 'number' && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-500/20 text-indigo-400 font-bold">
+                {skillCount}
+              </span>
+            )}
+          </button>
+        )}
 
         {/* Gear Icon (Settings Modal Trigger) */}
         <button

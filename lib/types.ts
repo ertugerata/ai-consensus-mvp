@@ -5,6 +5,18 @@ export type ProviderType = z.infer<typeof ProviderSchema>;
 
 const RESERVED_AGENT_IDS = new Set(['__proto__', 'constructor', 'prototype', 'referee']);
 
+export const AgentSkillSchema = z.object({
+  id: z.string().max(100),
+  name: z.string().max(150),
+  description: z.string().max(2000),
+  prompt: z.string().max(50000),
+  filename: z.string().optional(),
+  filePath: z.string().optional(),
+  isCustom: z.boolean().optional(),
+  updatedAt: z.string().optional(),
+});
+export type AgentSkill = z.infer<typeof AgentSkillSchema>;
+
 export const AgentConfigSchema = z.object({
   id: z
     .string()
@@ -17,7 +29,7 @@ export const AgentConfigSchema = z.object({
   provider: ProviderSchema,
   model: z.string().min(1, 'Model adı boş olamaz').max(150),
   skill: z.string().max(100).optional(),
-  systemPrompt: z.string().max(10000).optional(),
+  systemPrompt: z.string().max(50000).optional(),
   temperature: z.number().min(0).max(2).optional(),
 });
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;

@@ -9,12 +9,17 @@ import {
   Trash2,
   ClipboardCheck,
   Zap,
+  Folder,
+  Sparkles,
+  FileText,
+  Eye,
 } from 'lucide-react';
 import {
   ConfigState,
   AgentConfig,
   ProviderType,
   getPrimaryAgents,
+  AgentSkill,
 } from '@/lib/types';
 import { PROVIDER_MODEL_PRESETS, AGENT_SKILLS } from '@/lib/config/agents';
 
@@ -33,6 +38,9 @@ interface SettingsModalProps {
   onAddAgent: () => void;
   onRemoveAgent: (agentId: string) => void;
   onUpdateAgent: (agentId: string, updatedAgent: Partial<AgentConfig>) => void;
+  skills?: AgentSkill[];
+  skillsDirectory?: string;
+  onOpenSkillManager?: () => void;
 }
 
 const PROVIDER_NAMES: Record<ProviderType, string> = {
@@ -58,9 +66,13 @@ export function SettingsModal({
   onAddAgent,
   onRemoveAgent,
   onUpdateAgent,
+  skills = [],
+  skillsDirectory = 'skills/agents',
+  onOpenSkillManager,
 }: SettingsModalProps) {
   if (!showSettings) return null;
 
+  const availableSkills = skills && skills.length > 0 ? skills : AGENT_SKILLS;
   const primaryAgentsList = getPrimaryAgents(config);
 
   const availableProviderKeys = (Object.keys(PROVIDER_NAMES) as ProviderType[]).filter(
@@ -191,10 +203,39 @@ export function SettingsModal({
               </div>
             </div>
 
+            {/* Designated Skills Directory Banner */}
+            <div className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs mb-4 ${
+              isDark ? 'bg-indigo-950/40 border-indigo-900/60 text-indigo-300' : 'bg-indigo-50/90 border-indigo-200 text-indigo-900'
+            }`}>
+              <div className="flex items-center gap-2">
+                <Folder size={16} className="text-indigo-400 shrink-0" />
+                <span>
+                  <strong>Ajan Beceri Dizini:</strong>{' '}
+                  <code className="font-mono bg-black/20 px-1.5 py-0.5 rounded text-indigo-200 font-semibold">
+                    {`${skillsDirectory || 'skills/agents'}/*.md`}
+                  </code>
+                  <span className="ml-2 opacity-80 hidden md:inline">
+                    — Bu dizindeki tüm Markdown dosyaları ajan becerisi olarak seçilebilir.
+                  </span>
+                </span>
+              </div>
+              {onOpenSkillManager && (
+                <button
+                  type="button"
+                  onClick={onOpenSkillManager}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors self-start sm:self-auto shrink-0 shadow-sm"
+                >
+                  <Sparkles size={13} />
+                  <span>.md Becerilerini Yönet</span>
+                </button>
+              )}
+            </div>
+
             {/* Primary Agents Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
               {primaryAgentsList.map((ag, idx) => {
                 const availablePresets = PROVIDER_MODEL_PRESETS[ag.provider] || [];
+                const currentSkill = availableSkills.find((s) => s.id === (ag.skill || 'analytical')) || availableSkills[0];
 
                 return (
                   <div
@@ -226,13 +267,24 @@ export function SettingsModal({
 
                       {/* Skill (Beceri) Select */}
                       <div className="space-y-1">
-                        <label className={`text-[11px] font-medium flex items-center gap-1 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-                          <Zap size={13} /> Ajan Becerisi (Skill)
-                        </label>
+                        <div className="flex items-center justify-between">
+                          <label className={`text-[11px] font-medium flex items-center gap-1 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                            <Zap size={13} /> Ajan Becerisi (Skill)
+                          </label>
+                          {onOpenSkillManager && (
+                            <button
+                              type="button"
+                              onClick={onOpenSkillManager}
+                              className="text-[10px] text-indigo-400 hover:underline flex items-center gap-0.5"
+                            >
+                              <FileText size={10} /> Dosyalar (.md)
+                            </button>
+                          )}
+                        </div>
                         <select
                           value={ag.skill || 'analytical'}
                           onChange={(e) => {
-                            const selectedSkill = AGENT_SKILLS.find((s) => s.id === e.target.value);
+                            const selectedSkill = availableSkills.find((s) => s.id === e.target.value);
                             onUpdateAgent(ag.id || '', {
                               skill: e.target.value,
                               systemPrompt: selectedSkill?.prompt || ag.systemPrompt,
@@ -242,14 +294,14 @@ export function SettingsModal({
                             isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-300 text-slate-800'
                           }`}
                         >
-                          {AGENT_SKILLS.map((skill) => (
+                          {availableSkills.map((skill) => (
                             <option key={skill.id} value={skill.id}>
-                              {skill.name}
+                              {skill.name} ({skill.filename || `${skill.id}.md`})
                             </option>
                           ))}
                         </select>
-                        <p className="text-[10px] text-slate-400 italic">
-                          {AGENT_SKILLS.find((s) => s.id === (ag.skill || 'analytical'))?.description}
+                        <p className="text-[10px] text-slate-400 italic line-clamp-2">
+                          {currentSkill?.description || 'Açıklama mevcut değil.'}
                         </p>
                       </div>
 
