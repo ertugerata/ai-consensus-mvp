@@ -1,0 +1,5 @@
+{
+  "name": "ai-consensus-mvp",
+  "description": "Çoklu Ajan Karşılaştırma & Konsensüs Paneli",
+  "capabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
