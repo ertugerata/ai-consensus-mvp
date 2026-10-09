@@ -237,7 +237,7 @@ export function SkillManagerModal({
             <span>
               <strong>Belirlenen Beceri Dizini:</strong>{' '}
               <code className="px-1.5 py-0.5 rounded font-mono font-semibold bg-black/20 text-indigo-200">
-                {skillsDirectory || 'skills/agents'}/*.md
+                {skillsDirectory || 'skills/agents'}{'/*.md'}
               </code>
             </span>
           </div>
