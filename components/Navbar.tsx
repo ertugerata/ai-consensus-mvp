@@ -22,6 +22,8 @@ export function Navbar({
   showSettings,
   openSettings,
   closeSettings,
+  openSkillManager,
+  skillCount,
 }: NavbarProps) {
   return (
     <header
