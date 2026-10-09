@@ -13,6 +13,7 @@ import {
   Sparkles,
   FileText,
   Eye,
+  Server,
 } from 'lucide-react';
 import {
   ConfigState,
@@ -41,6 +42,10 @@ interface SettingsModalProps {
   skills?: AgentSkill[];
   skillsDirectory?: string;
   onOpenSkillManager?: () => void;
+  mcpServerUrl?: string;
+  setMcpServerUrl?: (url: string) => void;
+  mcpApiKey?: string;
+  setMcpApiKey?: (key: string) => void;
 }
 
 const PROVIDER_NAMES: Record<ProviderType, string> = {
@@ -69,6 +74,10 @@ export function SettingsModal({
   skills = [],
   skillsDirectory = 'skills/agents',
   onOpenSkillManager,
+  mcpServerUrl = 'http://localhost:5055',
+  setMcpServerUrl = () => {},
+  mcpApiKey = '',
+  setMcpApiKey = () => {},
 }: SettingsModalProps) {
   if (!showSettings) return null;
 
@@ -164,6 +173,60 @@ export function SettingsModal({
                     : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
                 }`}
               />
+            </div>
+          </div>
+
+          {/* MCP Server Configuration Section */}
+          <div className={`p-4 rounded-xl border text-xs space-y-3 ${
+            isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-50 border-slate-200'
+          }`}>
+            <div className="flex items-center justify-between border-b pb-2 border-slate-800/60">
+              <div className="font-bold text-xs text-blue-400 flex items-center gap-1.5">
+                <Server size={16} /> Model Context Protocol (MCP) Yapılandırması
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono">MCP ENTEGRASYONU</span>
+            </div>
+
+            <p className="text-[11px] text-slate-400">
+              Harici MCP sunucusuna bağlanarak kaynak, not ve dokümanları ajan hafızasına veya sorunuza aktarın. Sunucu tarafında <code>MCP_SERVER_URL</code> ve <code>MCP_API_KEY</code> ortam değişkenlerinden de yapılandırılabilir.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="space-y-1">
+                <label htmlFor="mcp-server-url" className={`font-semibold text-[11px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                  MCP Sunucu Adresi (URL)
+                </label>
+                <input
+                  id="mcp-server-url"
+                  type="text"
+                  value={mcpServerUrl}
+                  onChange={(e) => setMcpServerUrl(e.target.value)}
+                  placeholder="http://localhost:5055"
+                  className={`w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    isDark
+                      ? 'bg-slate-900 border-slate-800 text-slate-100 placeholder-slate-600'
+                      : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+                  }`}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="mcp-api-key" className={`font-semibold text-[11px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                  MCP API Anahtarı (İsteğe Bağlı)
+                </label>
+                <input
+                  id="mcp-api-key"
+                  type="password"
+                  value={mcpApiKey}
+                  onChange={(e) => setMcpApiKey(e.target.value)}
+                  placeholder="MCP API Key..."
+                  className={`w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    isDark
+                      ? 'bg-slate-900 border-slate-800 text-slate-100 placeholder-slate-600'
+                      : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+                  }`}
+                />
+              </div>
             </div>
           </div>
 

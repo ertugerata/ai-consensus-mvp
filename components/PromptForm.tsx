@@ -115,9 +115,9 @@ export function PromptForm({
                 type="button"
                 onClick={onOpenMcpModal}
                 className="text-[10px] px-2 py-1 rounded border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 font-semibold flex items-center gap-1 transition-all"
-                title="Open-Notebook sunucusundan notebook seç (MCP)"
+                title="MCP sunucusundan kaynak seç"
               >
-                <BookOpen size={11} /> Open-Notebook (MCP)
+                <BookOpen size={11} /> MCP (Kaynaklar)
               </button>
               <button
                 type="button"

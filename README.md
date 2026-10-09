@@ -25,9 +25,9 @@ Bu proje, **Next.js 15 (App Router)**, **Tailwind CSS**, **TypeScript** ve **Ver
     - **Yalınlaştırıcı & Eğitmen:** Karmaşık kavramları sade ve anlaşılır dille açıklama.
 - **Güvenli .env Tabanlı Yapılandırma:**
   - **API Anahtarları:** Ön yüzde API anahtarı girilmez. Anahtarlar doğrudan sunucunun `.env` dosyasında saklanır. Ön yüz yalnızca `.env` ile etkinleştirilmiş sağlayıcıları seçebilir.
-  - **Open-Notebook MCP:** Sunucu adresi (`OPEN_NOTEBOOK_URL`) ve API anahtarı (`OPEN_NOTEBOOK_API_KEY`) `.env` üzerinden yönetilir.
+  - **Model Context Protocol (MCP):** Sunucu adresi (`MCP_SERVER_URL`) ve API anahtarı (`MCP_API_KEY`) Ayarlar arayüzünden veya `.env` üzerinden yönetilir.
 - **Harici Hafıza (Memory) ve Kriter Desteği:**
-  - Ajanlara bağlam veya doküman aktarımı (`.txt`, `.md`, `.json`, `.csv`, `.py`, `.ts` yükleme ve indirme desteği), Open-Notebook MCP entegrasyonu ve özel çalışma kuralları tanımlama.
+  - Ajanlara bağlam veya doküman aktarımı (`.txt`, `.md`, `.json`, `.csv`, `.py`, `.ts` yükleme ve indirme desteği), MCP sunucu entegrasyonu ve özel çalışma kuralları tanımlama.
 - **Güvenlik Sertleştirmeleri:**
   - **SSRF Koruması (isBlockedUrl):** `dns.promises.lookup` ile DNS çözümlemesi, IPv6, loopback, link-local, ULA, CGNAT, private IP aralıkları (`ipaddr.js`) ve bulut metadata adreslerinin tespiti ve engellenmesi.
   - **API Token Doğrulaması (API_ACCESS_TOKEN):** Sabit zamanlı karşılaştırma (`crypto.timingSafeEqual`) ve hem `Authorization: Bearer` hem de `x-api-token` başlık desteği.
@@ -45,11 +45,11 @@ Bu proje, **Next.js 15 (App Router)**, **Tailwind CSS**, **TypeScript** ve **Ver
 | `OPENAI_API_KEY` | Sunucu tarafı OpenAI API anahtarı. | *Boş* |
 | `ANTHROPIC_API_KEY` | Sunucu tarafı Anthropic API anahtarı. | *Boş* |
 | `GEMINI_API_KEY` | Sunucu tarafı Google Gemini API anahtarı. | *Boş* |
-| `OPEN_NOTEBOOK_URL` | Sunucu tarafı Open-Notebook adresi. | `http://localhost:5055` |
-| `OPEN_NOTEBOOK_API_KEY` | Sunucu tarafı Open-Notebook API anahtarı. | *Boş* |
+| `MCP_SERVER_URL` | Sunucu tarafı MCP sunucu adresi. | `http://localhost:5055` |
+| `MCP_API_KEY` | Sunucu tarafı MCP API anahtarı. | *Boş* |
 | `API_ACCESS_TOKEN` | Tüm API uç noktaları için sistem genelinde doğrulama token'ı. | *Boş (İsteğe bağlı)* |
 | `ALLOW_PRIVATE_IPS` | Özel ağ ve yerel IP adreslerine (192.168.x, 10.x, 172.16.x, 127.0.0.1) erişime izin verir (`true`/`false`). | `false` |
-| `OPEN_NOTEBOOK_ALLOW_LIST` | İzin verilen Open-Notebook host veya `host:port` adreslerinin virgülle ayrılmış listesi. | *Boş* |
+| `MCP_ALLOW_LIST` | İzin verilen MCP host veya `host:port` adreslerinin virgülle ayrılmış listesi. | *Boş* |
 | `OLLAMA_BASE_URL` | Sunucu tarafındaki Ollama API adresi. | `http://localhost:11434` |
 | `APP_URL` | Uygulama kamu adresi. | `http://localhost:3000` |
 
@@ -64,8 +64,7 @@ ai-consensus-mvp/
 │   │   ├── consensus/
 │   │   │   └── route.ts         # Multi-Stage Harness API uç noktası
 │   │   ├── mcp/
-│   │   │   └── open-notebook/
-│   │   │       └── route.ts     # Open-Notebook entegrasyonu için SSRF korumalı MCP Proxy uç noktası
+│   │   │   └── route.ts         # Model Context Protocol (MCP) SSRF korumalı Proxy uç noktası
 │   │   ├── providers/
 │   │   │   └── route.ts         # Etkinleştirilmiş LLM sağlayıcılarını sunucu .env dosyasından okuma
 │   │   └── sessions/

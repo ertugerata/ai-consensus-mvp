@@ -10,10 +10,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { action, notebookId } = body;
+    const { action, notebookId, serverUrl, apiKey } = body;
 
-    const envBaseUrl = process.env.OPEN_NOTEBOOK_URL || 'http://localhost:5055';
-    const envApiKey = process.env.OPEN_NOTEBOOK_API_KEY || '';
+    const envBaseUrl = serverUrl || process.env.MCP_SERVER_URL || 'http://localhost:5055';
+    const envApiKey = apiKey || process.env.MCP_API_KEY || '';
 
     const allowPrivate = process.env.ALLOW_PRIVATE_IPS === 'true';
 
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     clearTimeout(timeout);
 
-    // 4. Yanıt Boyutu Sınırlaması (Max 2 MB)
+    // Yanıt Boyutu Sınırlaması (Max 2 MB)
     const maxSizeBytes = 2 * 1024 * 1024;
     const contentLength = upstreamResponse.headers.get('content-length');
     if (contentLength && parseInt(contentLength, 10) > maxSizeBytes) {
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'test') {
-      return NextResponse.json({ success: upstreamResponse.ok, message: upstreamResponse.ok ? 'Open-Notebook sunucu bağlantısı başarılı!' : 'Sunucu yanıt verdi ancak hata döndü.' });
+      return NextResponse.json({ success: upstreamResponse.ok, message: upstreamResponse.ok ? 'MCP sunucu bağlantısı başarılı!' : 'Sunucu yanıt verdi ancak hata döndü.' });
     }
 
     if (action === 'list_notebooks') {

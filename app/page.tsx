@@ -56,8 +56,10 @@ export default function Home() {
     ollama: true,
   });
 
-  // Open-Notebook MCP Modal State
+  // MCP Modal and Server State
   const [showMcpModal, setShowMcpModal] = useState(false);
+  const [mcpServerUrl, setMcpServerUrl] = useState('http://localhost:5055');
+  const [mcpApiKey, setMcpApiKey] = useState('');
   const [mcpTesting, setMcpTesting] = useState(false);
   const [mcpTestStatus, setMcpTestStatus] = useState<{ success?: boolean; error?: string; message?: string } | null>(null);
   const [mcpNotebooks, setMcpNotebooks] = useState<McpNotebookItem[]>([]);
@@ -235,6 +237,12 @@ export default function Home() {
         setEnableCrossReview(savedCrossReview === 'true');
       }
 
+      const savedMcpUrl = localStorage.getItem('ai_consensus_mcp_server_url');
+      if (savedMcpUrl) setMcpServerUrl(savedMcpUrl);
+
+      const savedMcpKey = localStorage.getItem('ai_consensus_mcp_api_key');
+      if (savedMcpKey) setMcpApiKey(savedMcpKey);
+
       // Clean up deprecated local sensitive items
       localStorage.removeItem('ai_consensus_keys');
       localStorage.removeItem('ai_consensus_open_notebook_url');
@@ -304,6 +312,8 @@ export default function Home() {
     safeSaveStorage('ai_consensus_criteria', evaluationCriteria);
     safeSaveStorage('ai_consensus_memory', memory);
     safeSaveStorage('ai_consensus_cross_review', String(enableCrossReview));
+    safeSaveStorage('ai_consensus_mcp_server_url', mcpServerUrl);
+    safeSaveStorage('ai_consensus_mcp_api_key', mcpApiKey);
     closeSettings();
   };
 
@@ -375,11 +385,13 @@ export default function Home() {
     setMcpTesting(true);
     setMcpTestStatus(null);
     try {
-      const res = await fetch('/api/mcp/open-notebook', {
+      const res = await fetch('/api/mcp', {
         method: 'POST',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'test',
+          serverUrl: mcpServerUrl,
+          apiKey: mcpApiKey,
         }),
       });
       const data = await res.json();
@@ -401,11 +413,13 @@ export default function Home() {
   const fetchMcpNotebooks = async () => {
     setMcpLoadingNotebooks(true);
     try {
-      const res = await fetch('/api/mcp/open-notebook', {
+      const res = await fetch('/api/mcp', {
         method: 'POST',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'list_notebooks',
+          serverUrl: mcpServerUrl,
+          apiKey: mcpApiKey,
         }),
       });
       const data = await res.json();
@@ -426,12 +440,14 @@ export default function Home() {
     if (!mcpSelectedNotebookId) return;
     setMcpFetchingContent(true);
     try {
-      const res = await fetch('/api/mcp/open-notebook', {
+      const res = await fetch('/api/mcp', {
         method: 'POST',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'get_notebook',
           notebookId: mcpSelectedNotebookId,
+          serverUrl: mcpServerUrl,
+          apiKey: mcpApiKey,
         }),
       });
       const data = await res.json();
@@ -850,6 +866,10 @@ ${formatAgentResult(s3)}
         skills={skills}
         skillsDirectory={skillsDirectory}
         onOpenSkillManager={() => setShowSkillManager(true)}
+        mcpServerUrl={mcpServerUrl}
+        setMcpServerUrl={setMcpServerUrl}
+        mcpApiKey={mcpApiKey}
+        setMcpApiKey={setMcpApiKey}
       />
 
       {/* SKILL MANAGER MODAL (.md files in skills/agents/) */}
@@ -865,7 +885,7 @@ ${formatAgentResult(s3)}
         onDelete={handleDeleteSkill}
       />
 
-      {/* OPEN-NOTEBOOK MCP MODAL */}
+      {/* MCP MODAL */}
       <McpModal
         isDark={isDark}
         showMcpModal={showMcpModal}
