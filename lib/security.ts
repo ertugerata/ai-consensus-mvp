@@ -198,7 +198,7 @@ export async function isBlockedUrl(targetUrl: string): Promise<boolean> {
 
   const hostname = parsed.hostname.toLowerCase();
 
-  const allowList = (process.env.OPEN_NOTEBOOK_ALLOW_LIST || '')
+  const allowList = (process.env.MCP_ALLOW_LIST || '')
     .split(',')
     .map((h) => h.trim().toLowerCase())
     .filter(Boolean);

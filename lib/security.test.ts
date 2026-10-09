@@ -55,8 +55,8 @@ describe('Security Utilities', () => {
       assert.equal(await isBlockedUrl('http://192.168.1.50:5055'), false);
     });
 
-    test('allows specific hosts in OPEN_NOTEBOOK_ALLOW_LIST', async () => {
-      process.env.OPEN_NOTEBOOK_ALLOW_LIST = '192.168.1.50, my-notebook.local';
+    test('allows specific hosts in MCP_ALLOW_LIST', async () => {
+      process.env.MCP_ALLOW_LIST = '192.168.1.50, my-notebook.local';
       assert.equal(await isBlockedUrl('http://192.168.1.50:5055'), false);
       assert.equal(await isBlockedUrl('http://my-notebook.local:5055'), false);
     });
