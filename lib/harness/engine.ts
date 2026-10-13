@@ -10,6 +10,7 @@ import {
 } from '../types';
 import { getAgentModelInstance } from '../providers/factory';
 import { sanitizeXmlData, sanitizeErrorMessage, sanitizeIdentifier } from './utils';
+import { getSkillById } from '../skills';
 
 const TOTAL_PIPELINE_BUDGET_MS = 58000; // 58 seconds total pipeline budget
 const GUARANTEED_REFEREE_BUDGET_MS = 20000; // Guaranteed minimum 20s for referee
@@ -46,7 +47,14 @@ async function executeAgentCall(
   }
 
   try {
-    const combinedSystemPrompt = (agentConfig.systemPrompt || '') + SYSTEM_SECURITY_DIRECTIVE;
+    let rawSystemPrompt = agentConfig.systemPrompt || '';
+    if (!rawSystemPrompt && agentConfig.skill) {
+      const skillObj = getSkillById(agentConfig.skill);
+      if (skillObj) {
+        rawSystemPrompt = skillObj.prompt;
+      }
+    }
+    const combinedSystemPrompt = rawSystemPrompt + SYSTEM_SECURITY_DIRECTIVE;
 
     const response = await generateText({
       model,

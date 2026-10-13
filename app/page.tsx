@@ -10,6 +10,7 @@ import {
   AgentConfig,
   ProviderType,
   getPrimaryAgents,
+  AgentSkill,
 } from '@/lib/types';
 import {
   DEFAULT_CONFIG,
@@ -20,6 +21,7 @@ import { Navbar } from '@/components/Navbar';
 import { PromptForm } from '@/components/PromptForm';
 import { ResultsView } from '@/components/ResultsView';
 import { SettingsModal } from '@/components/SettingsModal';
+import { SkillManagerModal } from '@/components/SkillManagerModal';
 import { McpModal, McpNotebookItem } from '@/components/McpModal';
 
 const MAX_MEMORY_CHARS = 200000;
@@ -54,8 +56,10 @@ export default function Home() {
     ollama: true,
   });
 
-  // Open-Notebook MCP Modal State
+  // MCP Modal and Server State
   const [showMcpModal, setShowMcpModal] = useState(false);
+  const [mcpServerUrl, setMcpServerUrl] = useState('http://localhost:5055');
+  const [mcpApiKey, setMcpApiKey] = useState('');
   const [mcpTesting, setMcpTesting] = useState(false);
   const [mcpTestStatus, setMcpTestStatus] = useState<{ success?: boolean; error?: string; message?: string } | null>(null);
   const [mcpNotebooks, setMcpNotebooks] = useState<McpNotebookItem[]>([]);
@@ -63,6 +67,12 @@ export default function Home() {
   const [mcpSelectedNotebookId, setMcpSelectedNotebookId] = useState<string | null>(null);
   const [mcpFetchingContent, setMcpFetchingContent] = useState(false);
   const [mcpSearchTerm, setMcpSearchTerm] = useState('');
+
+  // Skills Manager State (.md files from skills/agents/)
+  const [skills, setSkills] = useState<AgentSkill[]>(AGENT_SKILLS);
+  const [skillsDirectory, setSkillsDirectory] = useState('skills/agents');
+  const [showSkillManager, setShowSkillManager] = useState(false);
+  const [loadingSkills, setLoadingSkills] = useState(false);
 
   const filesInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -114,10 +124,89 @@ export default function Home() {
     }
   };
 
+  // Fetch Skills from designated markdown directory (skills/agents/*.md)
+  const fetchSkillsList = async () => {
+    setLoadingSkills(true);
+    try {
+      const res = await fetch('/api/skills', {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.skills && Array.isArray(data.skills)) {
+          setSkills(data.skills);
+          if (data.directory) setSkillsDirectory(data.directory);
+        }
+      }
+    } catch (err) {
+      console.error('Beceriler yüklenirken hata oluştu:', err);
+    } finally {
+      setLoadingSkills(false);
+    }
+  };
+
+  const handleUploadSkill = async (file: File): Promise<boolean> => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/skills', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData,
+      });
+      if (res.ok) {
+        await fetchSkillsList();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleCreateOrUpdateSkill = async (skillData: {
+    filename: string;
+    content: string;
+    name?: string;
+    description?: string;
+  }): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/skills', {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(skillData),
+      });
+      if (res.ok) {
+        await fetchSkillsList();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleDeleteSkill = async (skillId: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/skills?id=${encodeURIComponent(skillId)}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        await fetchSkillsList();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
   // Load configuration and session list on mount
   useEffect(() => {
     fetchSessionsList();
     fetchProvidersStatus();
+    fetchSkillsList();
 
     try {
       const savedTheme = localStorage.getItem('ai_consensus_theme') as 'dark' | 'light' | null;
@@ -147,6 +236,12 @@ export default function Home() {
       if (savedCrossReview !== null) {
         setEnableCrossReview(savedCrossReview === 'true');
       }
+
+      const savedMcpUrl = localStorage.getItem('ai_consensus_mcp_server_url');
+      if (savedMcpUrl) setMcpServerUrl(savedMcpUrl);
+
+      const savedMcpKey = localStorage.getItem('ai_consensus_mcp_api_key');
+      if (savedMcpKey) setMcpApiKey(savedMcpKey);
 
       // Clean up deprecated local sensitive items
       localStorage.removeItem('ai_consensus_keys');
@@ -217,6 +312,8 @@ export default function Home() {
     safeSaveStorage('ai_consensus_criteria', evaluationCriteria);
     safeSaveStorage('ai_consensus_memory', memory);
     safeSaveStorage('ai_consensus_cross_review', String(enableCrossReview));
+    safeSaveStorage('ai_consensus_mcp_server_url', mcpServerUrl);
+    safeSaveStorage('ai_consensus_mcp_api_key', mcpApiKey);
     closeSettings();
   };
 
@@ -288,11 +385,13 @@ export default function Home() {
     setMcpTesting(true);
     setMcpTestStatus(null);
     try {
-      const res = await fetch('/api/mcp/open-notebook', {
+      const res = await fetch('/api/mcp', {
         method: 'POST',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'test',
+          serverUrl: mcpServerUrl,
+          apiKey: mcpApiKey,
         }),
       });
       const data = await res.json();
@@ -314,11 +413,13 @@ export default function Home() {
   const fetchMcpNotebooks = async () => {
     setMcpLoadingNotebooks(true);
     try {
-      const res = await fetch('/api/mcp/open-notebook', {
+      const res = await fetch('/api/mcp', {
         method: 'POST',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'list_notebooks',
+          serverUrl: mcpServerUrl,
+          apiKey: mcpApiKey,
         }),
       });
       const data = await res.json();
@@ -339,12 +440,14 @@ export default function Home() {
     if (!mcpSelectedNotebookId) return;
     setMcpFetchingContent(true);
     try {
-      const res = await fetch('/api/mcp/open-notebook', {
+      const res = await fetch('/api/mcp', {
         method: 'POST',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'get_notebook',
           notebookId: mcpSelectedNotebookId,
+          serverUrl: mcpServerUrl,
+          apiKey: mcpApiKey,
         }),
       });
       const data = await res.json();
@@ -668,6 +771,8 @@ ${formatAgentResult(s3)}
           showSettings={showSettings}
           openSettings={openSettings}
           closeSettings={closeSettings}
+          openSkillManager={() => setShowSkillManager(true)}
+          skillCount={skills.length}
         />
 
         {/* MAIN BODY AREA */}
@@ -758,9 +863,29 @@ ${formatAgentResult(s3)}
         onAddAgent={handleAddAgent}
         onRemoveAgent={handleRemoveAgent}
         onUpdateAgent={handleUpdateAgent}
+        skills={skills}
+        skillsDirectory={skillsDirectory}
+        onOpenSkillManager={() => setShowSkillManager(true)}
+        mcpServerUrl={mcpServerUrl}
+        setMcpServerUrl={setMcpServerUrl}
+        mcpApiKey={mcpApiKey}
+        setMcpApiKey={setMcpApiKey}
       />
 
-      {/* OPEN-NOTEBOOK MCP MODAL */}
+      {/* SKILL MANAGER MODAL (.md files in skills/agents/) */}
+      <SkillManagerModal
+        isDark={isDark}
+        isOpen={showSkillManager}
+        onClose={() => setShowSkillManager(false)}
+        skills={skills}
+        skillsDirectory={skillsDirectory}
+        onRefresh={fetchSkillsList}
+        onUpload={handleUploadSkill}
+        onCreateOrUpdate={handleCreateOrUpdateSkill}
+        onDelete={handleDeleteSkill}
+      />
+
+      {/* MCP MODAL */}
       <McpModal
         isDark={isDark}
         showMcpModal={showMcpModal}

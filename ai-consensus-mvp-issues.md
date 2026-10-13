@@ -11,7 +11,7 @@ Bu rapor, `ai-consensus-mvp` projesindeki tespit edilen 10 güvenlik açığı v
 ## 1. Hardcoded API Key Leakage (.env dosyası)
 
 **Dosya**: `.env:3`
-**Orijinal Sorun**: `OPENROUTER_API_KEY=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` gibi hardcoded anahtar depoya exposures riski oluşturuyor.
+**Orijinal Sorun**: `OPENROUTER_API_KEY=YOUR_OPENROUTER_API_KEY gibi hardcoded anahtar depoya exposures riski oluşturuyor.
 
 **Düzeltilme**: `.env` dosyasından hardcoded key kaldırıldı, `OPENROUTER_API_KEY=` boş bırakıldı. Anahtarlar CI/CD pipeline'ı ve sekret yönetim sistemi üzerinden tanımlanmalıdır.
 

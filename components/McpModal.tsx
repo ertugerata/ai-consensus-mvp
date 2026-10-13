@@ -72,7 +72,7 @@ export function McpModal({
         <div className={`p-5 border-b flex justify-between items-center ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
           <div className="flex items-center gap-2 text-blue-500 font-bold text-base">
             <BookOpen size={20} />
-            <span>Open-Notebook MCP Entegrasyonu</span>
+            <span>Model Context Protocol (MCP) Entegrasyonu</span>
           </div>
           <button
             type="button"
@@ -87,9 +87,9 @@ export function McpModal({
         <div className={`p-4 border-b space-y-3 ${isDark ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}>
           <div className="flex items-center justify-between gap-3">
             <div className="text-xs space-y-1">
-              <span className="font-semibold text-slate-300">Sunucu Adresi & Anahtarları:</span>
+              <span className="font-semibold text-slate-300">MCP Sunucu Bağlantısı:</span>
               <p className="text-[11px] text-slate-400">
-                Open-Notebook sunucu adresi ve API anahtarı sunucu tarafında <code>OPEN_NOTEBOOK_URL</code> ve <code>OPEN_NOTEBOOK_API_KEY</code> ortam değişkenlerinden alınır.
+                MCP sunucu adresi ve API anahtarı Ayarlar bölümünden veya <code>MCP_SERVER_URL</code> ve <code>MCP_API_KEY</code> ortam değişkenlerinden alınır.
               </p>
             </div>
             <button
@@ -122,27 +122,27 @@ export function McpModal({
                 type="text"
                 value={mcpSearchTerm}
                 onChange={(e) => setMcpSearchTerm(e.target.value)}
-                placeholder="Notebook ara..."
+                placeholder="Kaynak / Notebook ara..."
                 className={`w-full pl-9 pr-3 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                   isDark ? 'bg-slate-950 border-slate-800 text-slate-100' : 'bg-slate-50 border-slate-300 text-slate-900'
                 }`}
               />
             </div>
             <span className="text-xs text-slate-400 font-mono">
-              {mcpNotebooks.length} Notebook bulundu
+              {mcpNotebooks.length} Kaynak bulundu
             </span>
           </div>
 
           {mcpLoadingNotebooks ? (
             <div className="flex items-center justify-center py-12 gap-2 text-slate-400 text-xs">
               <Loader2 size={18} className="animate-spin text-blue-500" />
-              <span>Open-Notebook sunucusundan notebook listesi çekiliyor...</span>
+              <span>MCP sunucusundan kaynak listesi çekiliyor...</span>
             </div>
           ) : mcpNotebooks.length === 0 ? (
             <div className="p-8 text-center border border-dashed rounded-xl border-slate-800 text-slate-500 text-xs space-y-2">
               <BookOpen size={24} className="mx-auto text-slate-600" />
-              <p>Open-Notebook sunucusunda listelenecek notebook bulunamadı veya henüz bağlanılmadı.</p>
-              <p className="text-[11px] text-slate-600">Sunucunun çalıştığını ve <code>.env</code> içindeki <code>OPEN_NOTEBOOK_URL</code> değerini kontrol edip &apos;Bağlan & Yenile&apos; butonuna basın.</p>
+              <p>MCP sunucusunda listelenecek kaynak/notebook bulunamadı veya henüz bağlanılmadı.</p>
+              <p className="text-[11px] text-slate-600">Sunucunun çalıştığını ve Ayarlar veya <code>.env</code> içindeki <code>MCP_SERVER_URL</code> değerini kontrol edip &apos;Bağlan & Yenile&apos; butonuna basın.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
