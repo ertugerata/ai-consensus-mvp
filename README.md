@@ -24,7 +24,7 @@ Bu proje, **Next.js 15 (App Router)**, **Tailwind CSS**, **TypeScript** ve **Ver
     - **İş Stratejisi & Maliyet Uzmanı:** Maliyet/fayda analizi, ROI ve iş modeli değerlendirmeleri.
     - **Yalınlaştırıcı & Eğitmen:** Karmaşık kavramları sade ve anlaşılır dille açıklama.
 - **Güvenli .env Tabanlı Yapılandırma:**
-  - **API Anahtarları:** Ön yüzde API anahtarı girilmez. Anahtarlar doğrudan sunucunun `.env` dosyasında saklanır. Ön yüz yalnızca `.env` ile etkinleştirilmiş sağlayıcıları seçebilir.
+  - **API Anahtarları:** Ön yüzde API anahtarı girilmez. Anahtarlar sunucunun `.env` dosyasına **boş bırakılmalı**; değerler CI/CD pipeline'ı veya sekret yönetim sistemi (Secret Manager) ile tanımlanmalı. Ön yüz yalnızca `.env` ile etkinleştirilmiş sağlayıcıları seçebilir.
   - **Open-Notebook MCP:** Sunucu adresi (`OPEN_NOTEBOOK_URL`) ve API anahtarı (`OPEN_NOTEBOOK_API_KEY`) `.env` üzerinden yönetilir.
 - **Harici Hafıza (Memory) ve Kriter Desteği:**
   - Ajanlara bağlam veya doküman aktarımı (`.txt`, `.md`, `.json`, `.csv`, `.py`, `.ts` yükleme ve indirme desteği), Open-Notebook MCP entegrasyonu ve özel çalışma kuralları tanımlama.
@@ -41,10 +41,10 @@ Bu proje, **Next.js 15 (App Router)**, **Tailwind CSS**, **TypeScript** ve **Ver
 
 | Değişken | Açıklama | Varsayılan |
 |---|---|---|
-| `OPENROUTER_API_KEY` | Sunucu tarafı OpenRouter API anahtarı. | *Boş* |
-| `OPENAI_API_KEY` | Sunucu tarafı OpenAI API anahtarı. | *Boş* |
-| `ANTHROPIC_API_KEY` | Sunucu tarafı Anthropic API anahtarı. | *Boş* |
-| `GEMINI_API_KEY` | Sunucu tarafı Google Gemini API anahtarı. | *Boş* |
+| `OPENROUTER_API_KEY` | Sunucu tarafı OpenRouter API anahtarı. CI/CD ile tanımlanır. | *Boş* |
+| `OPENAI_API_KEY` | Sunucu tarafı OpenAI API anahtarı. CI/CD ile tanımlanır. | *Boş* |
+| `ANTHROPIC_API_KEY` | Sunucu tarafı Anthropic API anahtarı. CI/CD ile tanımlanır. | *Boş* |
+| `GEMINI_API_KEY` | Sunucu tarafı Google Gemini API anahtarı. CI/CD ile tanımlanır. | *Boş* |
 | `OPEN_NOTEBOOK_URL` | Sunucu tarafı Open-Notebook adresi. | `http://localhost:5055` |
 | `OPEN_NOTEBOOK_API_KEY` | Sunucu tarafı Open-Notebook API anahtarı. | *Boş* |
 | `API_ACCESS_TOKEN` | Tüm API uç noktaları için sistem genelinde doğrulama token'ı. | *Boş (İsteğe bağlı)* |
@@ -52,6 +52,72 @@ Bu proje, **Next.js 15 (App Router)**, **Tailwind CSS**, **TypeScript** ve **Ver
 | `OPEN_NOTEBOOK_ALLOW_LIST` | İzin verilen Open-Notebook host veya `host:port` adreslerinin virgülle ayrılmış listesi. | *Boş* |
 | `OLLAMA_BASE_URL` | Sunucu tarafındaki Ollama API adresi. | `http://localhost:11434` |
 | `APP_URL` | Uygulama kamu adresi. | `http://localhost:3000` |
+
+---
+
+## 🛠️ Sağlayıcı Seçimi ve API Anahtarı Girme
+
+### Sağlayıcı Seçimi
+
+Uygulama aşağıdaki LLM sağlayıcılarını destekler:
+
+| Sağlayıcı | Açıklama | .env Ayarı |
+|-----------|----------|-----------|
+| **OpenRouter** | Çok sayıda model için tek entegrasyon. Claude 3.7 Sonnet, DeepSeek-R1, Llama 3.3 ve daha fazla. | `OPENROUTER_API_KEY` |
+| **OpenAI** | GPT-4o, GPT-4o-mini, o1-mini modelleri. | `OPENAI_API_KEY` |
+| **Anthropic** | Claude 3.5 Sonnet, Claude 3 Haiku modelleri. | `ANTHROPIC_API_KEY` |
+| **Google Gemini** | Gemini 2.0 Flash, 1.5 Pro modelleri. | `GEMINI_API_KEY` |
+| **Ollama** | Yerel modeller (Llama 3.3, Mistral, Phi4 vb.). | `OLLAMA_BASE_URL` |
+
+### API Anahtarı Yapılandırması
+
+**ÖNEMLİ**: `.env` dosyasına hiçbir API anahtarı **hardcoded olarak yazmayın**. Dosya şu şekilde olmalı:
+
+```env
+# .env - API anahtarları CI/CD ile veyaSecret Manager üzerinden tanımlanır
+OPENROUTER_API_KEY=
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
+```
+
+**Nasıl Eklenir:**
+
+1. **Docker Compose ile:**
+   ```bash
+   cp .env.example .env
+   ```
+   `.env` dosyasını düzenleyiciden açıp sağlamak istediğiniz sağlayıcılar için boş satırlar bırakın veya değerleri ekleyin. Anahtarları kod depusuna commit yapmayın.
+
+2. **Yerel Geliştirme:**
+   ```bash
+   cp .env.example .env
+   ```
+   `.env` dosyasını düzenleyin. Geliştirme ortamında token doğrulaması `API_ACCESS_TOKEN` ile yapılandırılabilir.
+
+3. **Token Doğrulaması (Opsiyonel):**
+   - `API_ACCESS_TOKEN` ortam değişkeni ayarlanırsa, tüm API uç noktalarında `Authorization: Bearer <token>` veya `x-api-token: <token>` başlığı gerekir.
+   - Production'da `ALLOW_UNAUTHENTICATED=true` belirtilmediği takdirde token doğrulması zorunlu olur.
+   - Development'da token atlanabilir ( `ALLOW_UNAUTHENTICATED=true` ile).
+
+### Örnek .env Dosyası:
+
+```env
+# API Keys - CI/CD ile veya Secret Manager ile yönetilmelidir
+OPENROUTER_API_KEY=
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
+
+# SSRF Security
+ALLOW_PRIVATE_IPS=false
+
+# System Access Token (Optional)
+API_ACCESS_TOKEN=
+
+# Application URL
+APP_URL=http://localhost:3000
+```
 
 ---
 
@@ -114,7 +180,7 @@ ai-consensus-mvp/
    ```bash
    cp .env.example .env
    ```
-   `.env` dosyanıza kullanmak istediğiniz sağlayıcıların API anahtarlarını ekleyin:
+   `.env` dosyanıza kullanmak istediğiniz sağlayıcılar için API anahtarları **boş bırakılmalı**; değerler CI/CD pipeline'ı veya Secret Manager ile tanımlanmalı:
    ```env
    OPENAI_API_KEY=sk-...
    ANTHROPIC_API_KEY=sk-ant-...
@@ -127,8 +193,6 @@ ai-consensus-mvp/
    ```
    Uygulama `http://localhost:3000` adresinde çalışacaktır.
 
----
-
 ### Yöntem 2: Yerel Geliştirme Ortamı (Node.js 22+)
 
 1. **Bağımlılıkları Yükleyin:**
@@ -136,8 +200,11 @@ ai-consensus-mvp/
    npm ci
    ```
 
-2. **Ortam Değişkenlerini Ayarlayın:**
-   `.env` dosyasını oluşturun ve API anahtarlarınızı girin.
+2. **Orant Değişkenlerini Ayarlayın:**
+   `.env` dosyasını oluşturun. API anahtarları **boş bırakılmalı**; değerler ortam değişkeni olarak ya da Secret Manager üzerinden sağlanmalı:
+   ```bash
+   cp .env.example .env
+   ```
 
 3. **Geliştirme Sunucusunu Başlatın:**
    ```bash

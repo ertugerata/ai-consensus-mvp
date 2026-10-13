@@ -30,7 +30,9 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Create data directory with explicit permissions for nextjs user (1001:1001)
-RUN mkdir -p /app/data && chown -R 1001:1001 /app/data
+RUN mkdir -p /app/data && chown -R 1001:1001 /app/data && \
+    chmod 750 /app/data && \
+    chmod 600 /app/data/consensus.db /app/data/consensus.db-shm /app/data/consensus.db-wal
 
 # Copy public folder
 COPY --from=builder /app/public ./public

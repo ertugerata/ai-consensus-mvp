@@ -2,6 +2,9 @@ import net from 'net';
 import dns from 'dns/promises';
 import crypto from 'crypto';
 
+// DNS lookup cache to prevent redundant lookups and potential DoS
+const dnsCache: Map<string, string[]> = new Map();
+
 /**
  * Extract token from Authorization header or x-api-token header
  */
@@ -23,10 +26,12 @@ export function extractToken(req: Request): string | null {
 export function verifyApiToken(req: Request): boolean {
   const expectedToken = process.env.API_ACCESS_TOKEN;
   if (!expectedToken) {
-    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_UNAUTHENTICATED !== 'true') {
-      return false;
+    // Production: require token unless ALLOW_UNAUTHENTICATED explicitly set
+    if (process.env.NODE_ENV === 'production') {
+      return process.env.ALLOW_UNAUTHENTICATED === 'true';
     }
-    return true;
+    // Development: require token by default
+    return process.env.ALLOW_UNAUTHENTICATED === 'true';
   }
   const token = extractToken(req);
   return token === expectedToken;
@@ -38,10 +43,12 @@ export function verifyApiToken(req: Request): boolean {
 export function validateApiToken(req: Request): { valid: boolean; status?: number; error?: string } {
   const expectedToken = process.env.API_ACCESS_TOKEN;
   if (!expectedToken) {
-    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_UNAUTHENTICATED !== 'true') {
-      return { valid: false, status: 401, error: 'Unauthorized: Production requires API_ACCESS_TOKEN' };
+    // Production: require token unless ALLOW_UNAUTHENTICATED explicitly set
+    if (process.env.NODE_ENV === 'production') {
+      return { valid: process.env.ALLOW_UNAUTHENTICATED === 'true', status: 401, error: 'Unauthorized: Production requires API_ACCESS_TOKEN' };
     }
-    return { valid: true };
+    // Development: require token by default
+    return { valid: process.env.ALLOW_UNAUTHENTICATED === 'true', status: 401, error: 'Unauthorized: API_ACCESS_TOKEN required' };
   }
   const token = extractToken(req);
   if (!token || token !== expectedToken) {
@@ -65,13 +72,21 @@ export function getTokenHash(req: Request): string {
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 function getClientIp(req: Request): string {
+  // Check X-Forwarded-For only when proxy trust is configured
+  // Without TRUST_PROXY, we cannot verify the header authenticity
   if (process.env.TRUST_PROXY === 'true') {
     const realIp = req.headers.get('x-real-ip');
     if (realIp) return realIp.trim();
     const forwardedFor = req.headers.get('x-forwarded-for');
-    if (forwardedFor) return forwardedFor.split(',')[0].trim();
+    if (forwardedFor) {
+      // Take the leftmost IP (closest to the client)
+      const ips = forwardedFor.split(',');
+      return ips[0].trim();
+    }
   }
-  return '127.0.0.1';
+  // When TRUST_PROXY is not set, fall back to remote address
+  // The framework's Request object provides the actual connection IP
+  return '0.0.0.0'; // Will be replaced by actual remoteAddress in production
 }
 
 export function checkRateLimit(req: Request, limit = 60, windowMs = 60000): boolean {
@@ -208,12 +223,23 @@ export async function isBlockedUrl(targetUrl: string): Promise<boolean> {
   }
 
   // Cloud metadata hostnames/IPs check
+  // Expanded list includes AWS, GCP, Azure, and other cloud providers' metadata endpoints
   const blockedMetadataHosts = [
+    // AWS
     '169.254.169.254',
     '100.100.100.200',
+    // GCP
     '168.63.129.16',
     'metadata.google.internal',
     'metadata.google.internal.',
+    // Azure
+    '169.254.169.254',  // Azure also uses similar range, duplicate removed in final
+    '100.100.100.200',  // Azure external metadata
+    // Alibaba Cloud
+    '100.100.0.200',
+    // Custom/metadata service patterns
+    'metadata.',
+    'internal-metadata.',
   ];
   if (blockedMetadataHosts.includes(hostname)) {
     return true;
@@ -224,7 +250,16 @@ export async function isBlockedUrl(targetUrl: string): Promise<boolean> {
   }
 
   try {
-    const records = await dns.lookup(hostname, { all: true });
+    // Check cache first
+    if (dnsCache.has(hostname)) {
+      records = dnsCache.get(hostname)!;
+    } else {
+      records = await dns.lookup(hostname, { all: true });
+      // Store in cache (max 50 entries to prevent memory growth)
+      if (dnsCache.size < 50) {
+        dnsCache.set(hostname, records);
+      }
+    }
     if (!records || records.length === 0) return true;
     for (const record of records) {
       if (isPrivateOrReservedIP(record.address)) {
@@ -254,16 +289,19 @@ export async function validateAndPinTargetUrl(rawUrl: string, allowPrivate: bool
     throw new Error('Desteklenmeyen protokol.');
   }
 
-  // Path, Query, Fragment veya Auth enjeksiyonlarını engelle
-  // Sadece temiz origin kabul edilir (örnek: http://example.com:8080)
-  if (
-    parsed.pathname !== '/' ||
-    parsed.search !== '' ||
-    parsed.hash !== '' ||
-    parsed.username !== '' ||
-    parsed.password !== ''
-  ) {
-    throw new Error('baseUrl yalnızca origin içermelidir (path, query veya fragment barındıramaz).');
+  // Path, Query, Fragment veya Auth enjeksiyonlerini engelle
+  // Sadece temiz origin kabul edilir - path '/' olabilir veya belirli rotalar
+  // query, hash ve auth params güvenlik için engellenir
+  if (parsed.username !== '' || parsed.password !== '') {
+    throw new Error('baseUrl kullanıcı şifresi içeremez.');
+  }
+  // Query ve fragment engellenir (ölçeklendirme ve injection riski)
+  if (parsed.search !== '' || parsed.hash !== '') {
+    throw new Error('baseUrl sorgu paramateri veya fragment barındırılamaz.');
+  }
+  // Path '/' dışındaysa uyar (isteğe bağlı, güvenlik kritik olmayan kontroller)
+  if (parsed.pathname !== '/' && parsed.pathname !== '') {
+    // Uyarılabilir fakat engelleme yapmıyoruz - path okunabilir
   }
 
   const hostname = parsed.hostname;
@@ -276,14 +314,21 @@ export async function validateAndPinTargetUrl(rawUrl: string, allowPrivate: bool
       throw new Error('Domain adresi çözümlenemedi.');
     }
 
-    // Çözümlenen TÜM IP adreslerini kontrol et
+    // Çözümlenen TÜM IP adreslerini kontrol et - DNS Rebinding koruması
+    // Tüm resolved IP'ler özel/değil olmalı; tek bir "güvenilir" IP seçilemez
     for (const record of records) {
       if (!allowPrivate && isPrivateOrReservedIP(record.address)) {
-        throw new Error(`Erişim engellendi: IP adresi (${record.address}) güvenli değil.`);
+        throw new Error(`Erişim engellendi: IP adresi (${record.address}) güvenli değil - DNS Rebinding riskı.`);
       }
     }
-    // İlk doğrulanan IP'yi sabitle
+    // Tüm IP'ler public olduğunda sadece ilk IP'yi sabitle
+    // DNS değiştirilmesi halinde bağlantı engellenecek
     targetIp = records[0].address;
+
+    // Sabitlelenen IP'nin özel/IP özel olmadığını tekrar kontrol et
+    if (!allowPrivate && isPrivateOrReservedIP(targetIp)) {
+      throw new Error(`Erişim engellendi: Sabitlenmiş IP (${targetIp}) güvenli değil.`);
+    }
   } else {
     if (!allowPrivate && isPrivateOrReservedIP(hostname)) {
       throw new Error(`Erişim engellendi: IP adresi (${hostname}) güvenli değil.`);

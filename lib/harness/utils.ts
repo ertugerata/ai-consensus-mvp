@@ -46,6 +46,9 @@ export function sanitizeErrorMessage(reason: unknown): string {
     .replace(/\b(sk-proj-[a-zA-Z0-9_-]{10,}|sk-or-v1-[a-zA-Z0-9_-]{10,}|sk-ant-[a-zA-Z0-9_-]{10,}|sk-[a-zA-Z0-9_-]{10,})\b/g, '[MASKED_KEY]')
     // Mask Google Gemini API keys
     .replace(/\bAIza[a-zA-Z0-9_-]{8,}\b/g, '[MASKED_KEY]')
+    // Mask additional key formats (OpenRouter, Anthropic variants)
+    .replace(/\bsk-ant-[a-zA-Z0-9_-]{10,}\b/g, '[MASKED_KEY]')
+    .replace(/\bsk-or-v1-[a-zA-Z0-9_-]{10,}\b/g, '[MASKED_KEY]')
     // Mask internal docker/localhost addresses with ports
     .replace(/host\.docker\.internal(:\d+)?/gi, '[INTERNAL_HOST]')
     .replace(/127\.0\.0\.1(:\d+)?/gi, '[INTERNAL_HOST]')
