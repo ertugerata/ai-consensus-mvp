@@ -250,6 +250,7 @@ export async function isBlockedUrl(targetUrl: string): Promise<boolean> {
   }
 
   try {
+    let records: dns.LookupAddress[];
     // Check cache first
     if (dnsCache.has(hostname)) {
       records = dnsCache.get(hostname)!;
