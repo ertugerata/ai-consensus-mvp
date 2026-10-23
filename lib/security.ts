@@ -1,5 +1,6 @@
 import net from 'net';
 import dns from 'dns/promises';
+import dnsTypes from 'dns';  // for types like LookupAddress
 import crypto from 'crypto';
 
 // DNS lookup cache to prevent redundant lookups and potential DoS
@@ -250,7 +251,7 @@ export async function isBlockedUrl(targetUrl: string): Promise<boolean> {
   }
 
   try {
-    let records: dns.LookupAddress[];
+    let records: dnsTypes.LookupAddress[];
     // Check cache first
     if (dnsCache.has(hostname)) {
       records = dnsCache.get(hostname)!;
